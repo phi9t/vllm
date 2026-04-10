@@ -19,14 +19,15 @@ install_host_user_dir() {
 }
 
 export_host_mount_context() {
+  if [[ "${DEVX_HOST_MOUNT_CONTEXT_INITIALIZED:-0}" == "1" ]]; then
+    return 0
+  fi
+
   DEVX_HOST_STATE_ROOT="$(resolve_host_state_root)"
   readonly DEVX_HOST_STATE_ROOT
 
   DEVX_HOST_CACHE_ROOT="$(resolve_host_cache_root)"
   readonly DEVX_HOST_CACHE_ROOT
-
-  CONTAINER_USER="${CONTAINER_USER:-kvothe}"
-  readonly CONTAINER_USER
 
   HOST_METRIC_SOCKET="${HOST_METRIC_SOCKET:-/tmp/metric.sock}"
   readonly HOST_METRIC_SOCKET
@@ -141,6 +142,9 @@ export_host_mount_context() {
   HOST_GID="${HOST_GID:-$(id -g)}"
   HOST_USER_NAME="${HOST_USER_NAME:-$(id -un)}"
   readonly HOST_UID HOST_GID HOST_USER_NAME
+
+  DEVX_HOST_MOUNT_CONTEXT_INITIALIZED=1
+  readonly DEVX_HOST_MOUNT_CONTEXT_INITIALIZED
 }
 
 reset_host_mount_override_env_vars() {

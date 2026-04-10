@@ -4,11 +4,16 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+TEST_ROOT="$(mktemp -d)"
+trap 'rm -rf "${TEST_ROOT}"' EXIT
 
-STATE_ROOT="${HOME}/.devx/special-circ-phi9t-vllm"
-HF_CACHE_ROOT="${HOME}/.cache/huggingface"
+TEST_HOME="${TEST_ROOT}/home"
+STATE_ROOT="${TEST_HOME}/.devx/special-circ-phi9t-vllm"
+HF_CACHE_ROOT="${TEST_HOME}/.cache/huggingface"
 HOST_UID="$(id -u)"
 HOST_GID="$(id -g)"
+
+mkdir -p "${TEST_HOME}"
 
 assert_exists() {
   local path="$1"
@@ -41,7 +46,7 @@ assert_owner() {
   }
 }
 
-bash "${REPO_ROOT}/devx/prepare_host_state.sh"
+HOME="${TEST_HOME}" bash "${REPO_ROOT}/devx/prepare_host_state.sh"
 
 assert_exists "${STATE_ROOT}/home"
 assert_exists "${STATE_ROOT}/ssh-hostkeys"
@@ -74,5 +79,16 @@ assert_owner "${STATE_ROOT}/cache/uv"
 assert_owner "${STATE_ROOT}/cache/pip"
 assert_owner "${STATE_ROOT}/cache/bazel"
 assert_owner "${HF_CACHE_ROOT}"
+
+HOME="${TEST_HOME}" bash -lc "
+  set -euo pipefail
+  source '${REPO_ROOT}/devx/lib/naming.sh'
+  export_identity_context '${REPO_ROOT}'
+  export_naming_context '${REPO_ROOT}/devx'
+  source '${REPO_ROOT}/devx/lib/host_mounts.sh'
+  export_host_mount_context
+  source '${REPO_ROOT}/devx/hf_token.env.sh'
+  source '${REPO_ROOT}/devx/hf_token.env.sh'
+"
 
 echo "PASS"
