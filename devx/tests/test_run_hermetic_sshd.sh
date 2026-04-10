@@ -336,6 +336,43 @@ grep -q "^AuthorizedKeysFile ${AUTHORIZED_KEYS}$" "${RUNTIME_CONFIG_FILE}" || {
   exit 1
 }
 
+PREEXISTING_STATE_DIR="${TEST_ROOT}/stack-root-preexisting/state"
+PREEXISTING_RUNTIME_DIR="${TEST_ROOT}/runtime-preexisting"
+PREEXISTING_HOME_DIR="${TEST_ROOT}/home-preexisting/kvothe"
+mkdir -p "${PREEXISTING_STATE_DIR}/hostkeys" "${PREEXISTING_RUNTIME_DIR}" "${PREEXISTING_HOME_DIR}"
+cat >"${PREEXISTING_STATE_DIR}/hostkeys/ssh_host_ed25519_key" <<'EOF'
+ed25519-preexisting
+EOF
+cat >"${PREEXISTING_STATE_DIR}/hostkeys/ssh_host_rsa_key" <<'EOF'
+rsa-preexisting
+EOF
+: >"${CHOWN_LOG}"
+
+HOST_UID="${KVOTHE_UID}" \
+HOST_GID="${KVOTHE_GID}" \
+CONFIG_FILE="${CONFIG_FILE}" \
+AUTHORIZED_KEYS="${AUTHORIZED_KEYS}" \
+HOME_TEMPLATE_DIR="${TEMPLATE_DIR}" \
+RUNTIME_DIR="${PREEXISTING_RUNTIME_DIR}" \
+STATE_DIR="${PREEXISTING_STATE_DIR}" \
+HOSTKEY_DIR="${PREEXISTING_STATE_DIR}/hostkeys" \
+LOGIN_USER=kvothe \
+PORT=27722 \
+SSHD_BIN="${FAKE_BIN}/sshd" \
+bash "${REPO_ROOT}/devx/run_hermetic_sshd.sh"
+
+grep -q "^0:0 ${PREEXISTING_STATE_DIR}/hostkeys$" "${CHOWN_LOG}" || {
+  echo "missing root reown of preexisting hostkey dir" >&2
+  cat "${CHOWN_LOG}" >&2
+  exit 1
+}
+
+grep -q "^0:0 ${PREEXISTING_STATE_DIR}/hostkeys/ssh_host_ed25519_key ${PREEXISTING_STATE_DIR}/hostkeys/ssh_host_rsa_key$" "${CHOWN_LOG}" || {
+  echo "missing root reown of preexisting host keys" >&2
+  cat "${CHOWN_LOG}" >&2
+  exit 1
+}
+
 if [ ! -f "${CONFIG_FILE}" ]; then
   echo "missing sshd config" >&2
   exit 1

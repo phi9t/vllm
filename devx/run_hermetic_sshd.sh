@@ -295,6 +295,8 @@ if [ ! -f "$HOSTKEY_RSA" ]; then
   ssh-keygen -t rsa -b 3072 -f "$HOSTKEY_RSA" -N ""
 fi
 
+chown 0:0 "$HOSTKEY_DIR"
+chown 0:0 "$HOSTKEY_ED25519" "$HOSTKEY_RSA"
 chmod 600 "$HOSTKEY_ED25519" "$HOSTKEY_RSA" >/dev/null 2>&1 || true
 
 render_sshd_config() {
