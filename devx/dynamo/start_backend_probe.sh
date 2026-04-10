@@ -38,6 +38,7 @@ curl_json() {
 [[ "${DYNAMO_PROBE_MAX_TOKENS}" =~ ^[0-9]+$ ]] || die "DYNAMO_PROBE_MAX_TOKENS must be an integer"
 [[ "${DYNAMO_CURL_CONNECT_TIMEOUT}" =~ ^[0-9]+$ ]] || die "DYNAMO_CURL_CONNECT_TIMEOUT must be an integer number of seconds"
 [[ "${DYNAMO_CURL_MAX_TIME}" =~ ^[0-9]+$ ]] || die "DYNAMO_CURL_MAX_TIME must be an integer number of seconds"
+[ "${DYNAMO_CURL_MAX_TIME}" -gt 0 ] || die "DYNAMO_CURL_MAX_TIME must be greater than zero so the probe always has a bounded total timeout"
 
 EXPECTED_ENDPOINT="dyn://${DYNAMO_NAMESPACE}.backend.generate"
 
