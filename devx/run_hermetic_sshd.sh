@@ -72,6 +72,7 @@ LOGIN_GID="$(id -g "$LOGIN_USER")"
 
 seed_login_home() {
   local seed_marker="$LOGIN_HOME/.devx_home_seeded_v1"
+  local template_entry template_name template_target
 
   install -d -m 700 -o "$LOGIN_UID" -g "$LOGIN_GID" "$LOGIN_HOME"
   install -d -m 700 -o "$LOGIN_UID" -g "$LOGIN_GID" "$LOGIN_HOME/.ssh"
@@ -81,22 +82,28 @@ seed_login_home() {
   install -d -m 755 -o "$LOGIN_UID" -g "$LOGIN_GID" "$LOGIN_HOME/.local/share"
   install -d -m 755 -o "$LOGIN_UID" -g "$LOGIN_GID" "$LOGIN_HOME/.local/bin"
 
-  if [ ! -f "$seed_marker" ] && [ -d "$HOME_TEMPLATE_DIR" ]; then
-    local template_entry template_name template_target
+  if [ -d "$HOME_TEMPLATE_DIR" ]; then
     while IFS= read -r -d '' template_entry; do
-      template_name="$(basename "$template_entry")"
-      template_target="$LOGIN_HOME/$template_name"
+      template_target="${LOGIN_HOME}/${template_entry#${HOME_TEMPLATE_DIR}/}"
+
+      if [ -d "$template_entry" ] && [ ! -L "$template_entry" ]; then
+        install -d -m 700 -o "$LOGIN_UID" -g "$LOGIN_GID" "$template_target"
+        continue
+      fi
 
       if [ -e "$template_target" ] || [ -L "$template_target" ]; then
         continue
       fi
 
+      install -d -m 700 -o "$LOGIN_UID" -g "$LOGIN_GID" "$(dirname "$template_target")"
       cp -a "$template_entry" "$template_target"
-    done < <(find "$HOME_TEMPLATE_DIR" -mindepth 1 -maxdepth 1 -print0)
+    done < <(find "$HOME_TEMPLATE_DIR" -mindepth 1 -print0)
   fi
 
   touch "$LOGIN_HOME/.zsh_history"
-  touch "$seed_marker"
+  if [ ! -f "$seed_marker" ]; then
+    touch "$seed_marker"
+  fi
   chown "$LOGIN_UID:$LOGIN_GID" "$LOGIN_HOME"
   chown "$LOGIN_UID:$LOGIN_GID" "$seed_marker"
 
@@ -226,7 +233,7 @@ if [ ! -f "$CONFIG_FILE" ]; then
 fi
 
 if [ ! -f "$AUTHORIZED_KEYS" ]; then
-  AUTHORIZED_KEYS="$ROOT_DIR/authorized_keys"
+  AUTHORIZED_KEYS="$ROOT_DIR/authorized_keys.placeholder"
 fi
 
 if [ ! -f "$AUTHORIZED_KEYS" ]; then

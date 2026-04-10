@@ -60,8 +60,8 @@ services:
       - ${DEVX_HOST_CACHE_UV_DIR}:/root/.cache/uv
       - ${DEVX_HOST_CACHE_CARGO_DIR}:/root/.cargo
       - ${DEVX_HOST_CACHE_RUSTUP_DIR}:/root/.rustup
-      - ${SSHD_CONFIG_PATH}:/run/devx/sshd_config:ro
-      - ${AUTHORIZED_KEYS_PATH}:/run/devx/authorized_keys:ro
+      - ${SSHD_CONFIG_PATH:-${REPO_ROOT}/devx/sshd_config}:/run/devx/sshd_config:ro
+      - ${AUTHORIZED_KEYS_PATH:-${REPO_ROOT}/devx/authorized_keys.placeholder}:/run/devx/authorized_keys:ro
       - ${REPO_ROOT}:/workspace/${PROJECT_ID}
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     deploy:

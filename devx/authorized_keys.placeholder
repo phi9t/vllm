@@ -1,0 +1,2 @@
+# Placeholder authorized_keys for clean-checkout bootstrap.
+# Real deployments should override AUTHORIZED_KEYS_PATH with a host-managed file.

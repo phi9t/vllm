@@ -32,9 +32,16 @@ cat >"${TEMPLATE_DIR}/.zshrc" <<'EOF'
 export FROM_TEMPLATE=1
 EOF
 
-cat >"${TEMPLATE_DIR}/.tmux.conf" <<'EOF'
+cat >"${TEMPLATE_DIR}/.zshenv" <<'EOF'
+export FROM_TEMPLATE_ZSHENV=1
+EOF
+
+mkdir -p "${TEMPLATE_DIR}/.tmux"
+cat >"${TEMPLATE_DIR}/.tmux/.tmux.conf" <<'EOF'
 set -g mouse on
 EOF
+
+ln -sfn .tmux/.tmux.conf "${TEMPLATE_DIR}/.tmux.conf"
 
 cat >"${LOGIN_HOME}/.zshrc" <<'EOF'
 export KEEP_ME=1
@@ -262,6 +269,16 @@ done
   exit 1
 }
 
+[ "$(cat "${LOGIN_HOME}/.zshenv")" = 'export FROM_TEMPLATE_ZSHENV=1' ] || {
+  echo "missing initial zshenv seed" >&2
+  exit 1
+}
+
+[ "$(cat "${LOGIN_HOME}/.tmux/.tmux.conf")" = 'set -g mouse on' ] || {
+  echo "missing initial tmux seed" >&2
+  exit 1
+}
+
 [ -f "${LOGIN_HOME}/.devx_home_seeded_v1" ] || {
   echo "missing seed marker" >&2
   exit 1
@@ -271,6 +288,31 @@ if [ -e "${LOGIN_HOME}/.zshrc" ] && [ "$(cat "${LOGIN_HOME}/.zshrc")" = 'export 
   echo "template file replaced preexisting home file" >&2
   exit 1
 fi
+
+rm -f "${LOGIN_HOME}/.zshenv" "${LOGIN_HOME}/.tmux/.tmux.conf"
+
+HOST_UID="${KVOTHE_UID}" \
+HOST_GID="${KVOTHE_GID}" \
+CONFIG_FILE="${CONFIG_FILE}" \
+AUTHORIZED_KEYS="${AUTHORIZED_KEYS}" \
+HOME_TEMPLATE_DIR="${TEMPLATE_DIR}" \
+RUNTIME_DIR="${RUNTIME_DIR}" \
+STATE_DIR="${STATE_DIR}" \
+HOSTKEY_DIR="${STATE_DIR}/hostkeys" \
+LOGIN_USER=kvothe \
+PORT=27722 \
+SSHD_BIN="${FAKE_BIN}/sshd" \
+bash "${REPO_ROOT}/devx/start_main.sh"
+
+[ "$(cat "${LOGIN_HOME}/.zshenv")" = 'export FROM_TEMPLATE_ZSHENV=1' ] || {
+  echo "missing reseeded zshenv" >&2
+  exit 1
+}
+
+[ "$(cat "${LOGIN_HOME}/.tmux/.tmux.conf")" = 'set -g mouse on' ] || {
+  echo "missing reseeded tmux file" >&2
+  exit 1
+}
 
 if [ ! -f "${CONFIG_FILE}" ]; then
   echo "missing sshd config" >&2
