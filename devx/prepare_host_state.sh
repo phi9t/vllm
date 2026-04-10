@@ -6,6 +6,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ -z "${CONTAINER_USER:-}" ]]; then
   CONTAINER_USER="kvothe"
+elif [[ "${CONTAINER_USER}" != "kvothe" ]]; then
+  echo "prepare_host_state.sh: CONTAINER_USER must be kvothe (got: ${CONTAINER_USER})" >&2
+  exit 1
 fi
 
 # shellcheck disable=SC1091

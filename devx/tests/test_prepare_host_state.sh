@@ -80,6 +80,27 @@ assert_owner "${STATE_ROOT}/cache/pip"
 assert_owner "${STATE_ROOT}/cache/bazel"
 assert_owner "${HF_CACHE_ROOT}"
 
+BAD_HOME="${TEST_ROOT}/bad-home"
+BAD_STDOUT="${TEST_ROOT}/prepare_host_state.out"
+BAD_STDERR="${TEST_ROOT}/prepare_host_state.err"
+mkdir -p "${BAD_HOME}"
+
+if CONTAINER_USER=alice HOME="${BAD_HOME}" bash "${REPO_ROOT}/devx/prepare_host_state.sh" >"${BAD_STDOUT}" 2>"${BAD_STDERR}"; then
+  echo "prepare_host_state.sh unexpectedly accepted CONTAINER_USER=alice" >&2
+  exit 1
+fi
+
+if ! grep -q 'CONTAINER_USER must be kvothe' "${BAD_STDERR}"; then
+  echo "missing kvothe contract error from prepare_host_state.sh" >&2
+  cat "${BAD_STDERR}" >&2
+  exit 1
+fi
+
+if [ -e "${BAD_HOME}/.devx/special-circ-phi9t-vllm" ]; then
+  echo "prepare_host_state.sh created state for invalid CONTAINER_USER" >&2
+  exit 1
+fi
+
 printf 'hf_test_token\n' > "${STATE_ROOT}/secrets/huggingface_token"
 
 HOME="${TEST_HOME}" bash -c "
@@ -95,5 +116,7 @@ HOME="${TEST_HOME}" bash -c "
   source '${REPO_ROOT}/devx/hf_token.env.sh'
   [ \"\${HF_TOKEN:-}\" = 'hf_test_token' ]
 "
+
+rm -f "${BAD_STDOUT}" "${BAD_STDERR}"
 
 echo "PASS"
