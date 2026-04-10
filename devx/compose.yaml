@@ -10,8 +10,8 @@ services:
         USER_GID: ${HOST_GID:?HOST_GID must be set}
     container_name: ${STACK_NAME}-devshell
     restart: unless-stopped
-    network_mode: host
     ipc: host
+    shm_size: ${MAIN_SHM_SIZE:-16g}
     user: "0:0"
     working_dir: /workspace/${PROJECT_ID}/${REPO_REL_PATH}
     environment:
@@ -64,6 +64,10 @@ services:
       - ${AUTHORIZED_KEYS_PATH:-${REPO_ROOT}/devx/authorized_keys.placeholder}:/run/devx/authorized_keys:ro
       - ${REPO_ROOT}:/workspace/${PROJECT_ID}
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    ports:
+      - 127.0.0.1:${SSH_PORT:-27722}:${SSH_PORT:-27722}
+    networks:
+      - devx-internal
     deploy:
       resources:
         reservations:
@@ -81,6 +85,64 @@ services:
       timeout: 5s
       retries: 10
       start_period: 15s
+
+  vllm-runtime:
+    build:
+      context: ${REPO_ROOT}
+      dockerfile: devx/vllm_runtime.dockerfile
+      args:
+        BASE_IMAGE: ${DEVX_BASE_IMAGE:-vllm/vllm-openai:latest}
+        USERNAME: kvothe
+        USER_UID: ${HOST_UID:?HOST_UID must be set}
+        USER_GID: ${HOST_GID:?HOST_GID must be set}
+    container_name: ${STACK_NAME}-vllm-runtime
+    restart: unless-stopped
+    ipc: host
+    shm_size: ${VLLM_RUNTIME_SHM_SIZE:-16g}
+    working_dir: /workspace/${PROJECT_ID}
+    user: "${HOST_UID}:${HOST_GID}"
+    environment:
+      HOME: /home/kvothe
+      HF_TOKEN: ${HF_TOKEN:-}
+      HF_HOME: /home/kvothe/.cache/huggingface
+      HUGGINGFACE_HUB_CACHE: /home/kvothe/.cache/huggingface/hub
+      HF_DATASETS_CACHE: /home/kvothe/.cache/huggingface/datasets
+      TRANSFORMERS_CACHE: /home/kvothe/.cache/huggingface/hub
+      VLLM_RUNTIME_MODE: ${VLLM_RUNTIME_MODE:-source-overlay}
+      VLLM_RUNTIME_SOURCE_DIR: /workspace/${PROJECT_ID}
+      VLLM_RUNTIME_HOST: 0.0.0.0
+      VLLM_RUNTIME_PORT: ${VLLM_RUNTIME_PORT:-8000}
+      VLLM_MODEL: ${VLLM_MODEL:-Qwen/Qwen3-8B}
+      NVIDIA_VISIBLE_DEVICES: ${VLLM_RUNTIME_VISIBLE_DEVICES:-${VLLM_RUNTIME_GPU_DEVICE_ID:-1}}
+      NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-all}
+    volumes:
+      - ${REPO_ROOT}:/workspace/${PROJECT_ID}:ro
+      - ${DEVX_HOST_CACHE_HF_DIR}:/home/kvothe/.cache/huggingface
+      - ${DEVX_HOST_VLLM_RUNTIME_TMP_DIR}:/tmp
+      - ${DEVX_HOST_VLLM_RUNTIME_VAR_TMP_DIR}:/var/tmp
+      - ${DEVX_HOST_VLLM_RUNTIME_LOGS_DIR}:/var/log/devx-vllm-runtime
+    entrypoint: []
+    command:
+      - /opt/devx/start_vllm_runtime.sh
+    networks:
+      - devx-internal
+    healthcheck:
+      test:
+        ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:${VLLM_RUNTIME_PORT:-8000}/health')\" >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${VLLM_RUNTIME_GPU_DEVICE_ID:-1}"]
+              capabilities: [gpu]
 
   sglang:
     image: ${SGLANG_WORKER_IMAGE:-lmsysorg/sglang:latest}
@@ -174,3 +236,7 @@ services:
       timeout: 10s
       retries: 10
       start_period: 20s
+
+networks:
+  devx-internal:
+    driver: bridge
