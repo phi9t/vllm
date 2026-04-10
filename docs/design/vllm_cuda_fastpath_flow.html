@@ -1,0 +1,620 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>vLLM CUDA Fast Path - Hacker's Flow</title>
+    <style>
+      :root {
+        --bg: #0f141a;
+        --bg2: #151c24;
+        --panel: #101721;
+        --panel2: #0d131b;
+        --ink: #d7e1ee;
+        --muted: #9fb0c3;
+        --accent: #56f2c0;
+        --accent2: #ffbe55;
+        --accent3: #7cc1ff;
+        --danger: #ff6b6b;
+        --line: #2a3544;
+        --node: #111a24;
+        --node-border: #2d3a4b;
+        --node-active: #1b2a3d;
+        --shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+        --radius: 14px;
+        --mono: "IBM Plex Mono", "Iosevka", "Fira Code", "Menlo", monospace;
+        --sans: "Sora", "Avenir Next", "Trebuchet MS", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(1200px 700px at 10% 0%, #1a2431 0%, #0f141a 55%),
+          linear-gradient(180deg, #0f141a, #0c1117 70%);
+        color: var(--ink);
+        font-family: var(--sans);
+      }
+
+      header {
+        padding: 24px 32px 0;
+      }
+
+      .title {
+        display: flex;
+        align-items: flex-end;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+
+      .title h1 {
+        margin: 0;
+        font-size: 28px;
+        letter-spacing: 0.4px;
+      }
+
+      .title .tag {
+        font-family: var(--mono);
+        font-size: 12px;
+        padding: 6px 10px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        color: var(--muted);
+      }
+
+      .subtitle {
+        color: var(--muted);
+        margin: 8px 0 0;
+        max-width: 880px;
+        font-size: 14px;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 300px 1fr 320px;
+        gap: 18px;
+        padding: 18px 24px 28px;
+      }
+
+      .panel {
+        background: linear-gradient(180deg, var(--panel), var(--panel2));
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+      }
+
+      .panel h2 {
+        margin: 0;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 1.4px;
+        color: var(--muted);
+      }
+
+      .panel .section {
+        padding: 16px 16px 18px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .panel .section:last-child {
+        border-bottom: 0;
+      }
+
+      .controls label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin: 8px 0;
+        font-size: 13px;
+        color: var(--ink);
+      }
+
+      .controls input[type="checkbox"] {
+        accent-color: var(--accent);
+      }
+
+      .controls .hint {
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .search {
+        width: 100%;
+        background: #0a1118;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        padding: 8px 10px;
+        color: var(--ink);
+        font-family: var(--mono);
+      }
+
+      .legend {
+        display: grid;
+        gap: 10px;
+      }
+
+      .legend .row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+
+      .legend .dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: var(--accent3);
+      }
+
+      .legend .dot.attn { background: #56f2c0; }
+      .legend .dot.cache { background: #ffbe55; }
+      .legend .dot.compile { background: #7cc1ff; }
+      .legend .dot.core { background: #f58afc; }
+      .legend .dot.quant { background: #ff6b6b; }
+
+      .canvas-wrap {
+        position: relative;
+        min-height: 620px;
+        overflow: hidden;
+      }
+
+      svg {
+        width: 100%;
+        height: 680px;
+        display: block;
+        background:
+          radial-gradient(500px 500px at 80% 0%, rgba(86, 242, 192, 0.12), transparent),
+          radial-gradient(500px 500px at 0% 100%, rgba(124, 193, 255, 0.12), transparent);
+      }
+
+      .node rect {
+        fill: var(--node);
+        stroke: var(--node-border);
+        stroke-width: 1.2;
+        rx: 12;
+        ry: 12;
+        transition: 0.2s ease;
+      }
+
+      .node text {
+        font-family: var(--mono);
+        fill: var(--ink);
+        font-size: 12px;
+      }
+
+      .node .title {
+        font-size: 13px;
+        font-family: var(--sans);
+        font-weight: 600;
+      }
+
+      .node:hover rect {
+        stroke: var(--accent);
+      }
+
+      .node.active rect {
+        fill: var(--node-active);
+        stroke: var(--accent2);
+      }
+
+      .node.hidden {
+        opacity: 0.12;
+      }
+
+      .edge {
+        stroke: #3a4b60;
+        stroke-width: 1.2;
+        fill: none;
+        marker-end: url(#arrow);
+        opacity: 0.7;
+      }
+
+      .edge.active {
+        stroke: var(--accent2);
+        opacity: 1;
+        stroke-width: 2;
+      }
+
+      .toolbar {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        display: flex;
+        gap: 10px;
+      }
+
+      .btn {
+        background: #0c141d;
+        border: 1px solid var(--line);
+        color: var(--ink);
+        padding: 6px 10px;
+        border-radius: 10px;
+        font-family: var(--mono);
+        font-size: 12px;
+        cursor: pointer;
+      }
+
+      .btn:hover {
+        border-color: var(--accent);
+      }
+
+      .details {
+        font-size: 13px;
+        color: var(--ink);
+        line-height: 1.5;
+      }
+
+      .details code {
+        font-family: var(--mono);
+        color: var(--accent);
+      }
+
+      .details a {
+        color: var(--accent3);
+        text-decoration: none;
+        font-family: var(--mono);
+      }
+
+      .details a:hover {
+        text-decoration: underline;
+      }
+
+      .pill {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        font-family: var(--mono);
+        background: #0b121a;
+        border: 1px solid var(--line);
+        color: var(--muted);
+        margin-right: 6px;
+      }
+
+      @media (max-width: 1100px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+
+        svg {
+          height: 520px;
+        }
+
+        .canvas-wrap {
+          min-height: 520px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="title">
+        <h1>vLLM CUDA Fast Path</h1>
+        <div class="tag">Hacker Flow Diagram</div>
+      </div>
+      <p class="subtitle">
+        Interactive map of the CUDA + Torch fast path in vLLM, focused on paged
+        attention, attention backend selection, and CUDA graph/compile hooks.
+        Click any node to see details and open source files.
+      </p>
+    </header>
+
+    <div class="layout">
+      <aside class="panel">
+        <div class="section">
+          <h2>Filters</h2>
+          <div class="controls">
+            <label><input type="checkbox" data-layer="core" checked /> core</label>
+            <label><input type="checkbox" data-layer="attn" checked /> attention</label>
+            <label><input type="checkbox" data-layer="cache" checked /> kv cache</label>
+            <label><input type="checkbox" data-layer="compile" checked /> compile / cudagraph</label>
+            <label><input type="checkbox" data-layer="quant" checked /> quant / moe</label>
+            <div class="hint">Toggle layers to isolate the path.</div>
+          </div>
+        </div>
+        <div class="section">
+          <h2>Search</h2>
+          <input class="search" placeholder="paged_attention, flash_attn, _C..." />
+        </div>
+        <div class="section">
+          <h2>Legend</h2>
+          <div class="legend">
+            <div class="row"><span class="dot core"></span> core runtime</div>
+            <div class="row"><span class="dot attn"></span> attention backends</div>
+            <div class="row"><span class="dot cache"></span> kv cache / paged attention</div>
+            <div class="row"><span class="dot compile"></span> compile + cudagraph</div>
+            <div class="row"><span class="dot quant"></span> quant + moe</div>
+          </div>
+        </div>
+      </aside>
+
+      <main class="panel canvas-wrap">
+        <div class="toolbar">
+          <button class="btn" id="resetView">reset view</button>
+          <button class="btn" id="clearFocus">clear focus</button>
+        </div>
+        <svg viewBox="0 0 1200 720">
+          <defs>
+            <marker
+              id="arrow"
+              markerWidth="8"
+              markerHeight="6"
+              refX="7"
+              refY="3"
+              orient="auto"
+            >
+              <path d="M0,0 L8,3 L0,6 z" fill="#3a4b60" />
+            </marker>
+          </defs>
+          <g id="canvas">
+            <path class="edge" data-from="engine" data-to="gpu_runner" d="M160 120 C240 120, 260 150, 320 170" />
+            <path class="edge" data-from="gpu_runner" data-to="attn_registry" d="M440 190 C520 190, 540 190, 620 190" />
+            <path class="edge" data-from="attn_registry" data-to="flash_attn" d="M760 160 C820 130, 850 120, 900 120" />
+            <path class="edge" data-from="attn_registry" data-to="flashinfer" d="M760 190 C820 190, 850 190, 900 190" />
+            <path class="edge" data-from="attn_registry" data-to="triton" d="M760 220 C820 250, 850 260, 900 260" />
+            <path class="edge" data-from="flash_attn" data-to="paged_attention" d="M1010 140 C1060 160, 1060 220, 1010 260" />
+            <path class="edge" data-from="flashinfer" data-to="paged_attention" d="M1010 210 C1040 230, 1040 240, 1010 260" />
+            <path class="edge" data-from="triton" data-to="paged_attention" d="M1010 280 C1020 290, 1020 290, 1010 300" />
+            <path class="edge" data-from="paged_attention" data-to="cuda_ops" d="M940 380 C940 430, 930 470, 900 520" />
+            <path class="edge" data-from="cuda_ops" data-to="cuda_ext" d="M780 560 C720 600, 640 620, 560 620" />
+
+            <path class="edge" data-from="env_override" data-to="cuda_graph" d="M260 360 C280 360, 300 360, 320 360" />
+            <path class="edge" data-from="cuda_graph" data-to="flash_attn" d="M520 340 C640 300, 780 230, 900 140" />
+            <path class="edge" data-from="cuda_graph" data-to="triton" d="M520 360 C660 380, 820 320, 900 280" />
+
+            <path class="edge" data-from="quant" data-to="cuda_ops" d="M220 550 C340 520, 540 520, 720 540" />
+
+            <g class="node" data-id="engine" data-layer="core" transform="translate(60 70)" data-title="LLM Engine" data-link="../../vllm/engine/llm_engine.py" data-desc="Entry point for request scheduling and execution. Feeds batches into the v1 runtime.">
+              <rect width="160" height="80" />
+              <text class="title" x="16" y="28">LLM Engine</text>
+              <text x="16" y="50">vllm/engine</text>
+              <text x="16" y="66">llm_engine.py</text>
+            </g>
+
+            <g class="node" data-id="gpu_runner" data-layer="core" transform="translate(320 140)" data-title="GPU Model Runner" data-link="../../vllm/v1/worker/gpu_model_runner.py" data-desc="Builds attention metadata, handles prefill/decode, and calls attention backends.">
+              <rect width="200" height="100" />
+              <text class="title" x="16" y="28">GPU Model Runner</text>
+              <text x="16" y="50">vllm/v1/worker</text>
+              <text x="16" y="66">gpu_model_runner.py</text>
+              <text x="16" y="82">batch + KV logic</text>
+            </g>
+
+            <g class="node" data-id="attn_registry" data-layer="attn" transform="translate(620 150)" data-title="Attention Backend Registry" data-link="../../vllm/v1/attention/backends/registry.py" data-desc="Resolves backend choice (FlashAttention, FlashInfer, Triton) based on platform.">
+              <rect width="160" height="90" />
+              <text class="title" x="14" y="28">Backend Registry</text>
+              <text x="14" y="50">vllm/v1/attention</text>
+              <text x="14" y="66">backends/registry.py</text>
+            </g>
+
+            <g class="node" data-id="flash_attn" data-layer="attn" transform="translate(900 80)" data-title="FlashAttention Backend" data-link="../../vllm/v1/attention/backends/flash_attn.py" data-desc="Uses flash_attn_varlen_func + reshape_and_cache_flash for fast attention.">
+              <rect width="190" height="80" />
+              <text class="title" x="14" y="28">FlashAttention</text>
+              <text x="14" y="50">vllm/v1/attention</text>
+              <text x="14" y="66">backends/flash_attn.py</text>
+            </g>
+
+            <g class="node" data-id="flashinfer" data-layer="attn" transform="translate(900 170)" data-title="FlashInfer Backend" data-link="../../vllm/v1/attention/backends/flashinfer.py" data-desc="FlashInfer kernels + custom cache ops. Supports paged KV cache.">
+              <rect width="190" height="80" />
+              <text class="title" x="14" y="28">FlashInfer</text>
+              <text x="14" y="50">vllm/v1/attention</text>
+              <text x="14" y="66">backends/flashinfer.py</text>
+            </g>
+
+            <g class="node" data-id="triton" data-layer="attn" transform="translate(900 250)" data-title="Triton Attention" data-link="../../vllm/v1/attention/backends/triton_attn.py" data-desc="Pure Triton attention path with custom kernels and unified attention ops.">
+              <rect width="190" height="80" />
+              <text class="title" x="14" y="28">Triton Attention</text>
+              <text x="14" y="50">vllm/v1/attention</text>
+              <text x="14" y="66">backends/triton_attn.py</text>
+            </g>
+
+            <g class="node" data-id="paged_attention" data-layer="cache" transform="translate(820 300)" data-title="Paged Attention + KV Cache" data-link="../../vllm/_custom_ops.py" data-desc="Paged attention kernels, reshape_and_cache, swap_blocks, gather ops. All backed by torch.ops._C and _C_cache_ops.">
+              <rect width="260" height="120" />
+              <text class="title" x="16" y="30">Paged Attention + KV Cache</text>
+              <text x="16" y="52">vllm/_custom_ops.py</text>
+              <text x="16" y="70">torch.ops._C.*</text>
+              <text x="16" y="88">torch.ops._C_cache_ops.*</text>
+            </g>
+
+            <g class="node" data-id="cuda_ops" data-layer="core" transform="translate(720 500)" data-title="CUDA Kernel Bindings" data-link="../../vllm/_custom_ops.py" data-desc="Bindings to compiled C++/CUDA kernels (paged attention, fused norms, quant GEMMs, MoE).">
+              <rect width="200" height="90" />
+              <text class="title" x="14" y="28">CUDA Ops</text>
+              <text x="14" y="50">vllm/_custom_ops.py</text>
+              <text x="14" y="66">torch.ops._C</text>
+            </g>
+
+            <g class="node" data-id="cuda_ext" data-layer="core" transform="translate(420 570)" data-title="C++/CUDA Extension" data-link="../../vllm/_C.abi3.so" data-desc="Compiled extension registering torch.ops._C.* symbols.">
+              <rect width="220" height="70" />
+              <text class="title" x="14" y="28">C++/CUDA Extension</text>
+              <text x="14" y="50">vllm/_C.abi3.so</text>
+            </g>
+
+            <g class="node" data-id="env_override" data-layer="compile" transform="translate(80 310)" data-title="Torch Env Overrides" data-link="../../vllm/env_override.py" data-desc="Sets Inductor config (compile threads) and monkeypatches torch._inductor.">
+              <rect width="180" height="80" />
+              <text class="title" x="14" y="28">Env Override</text>
+              <text x="14" y="50">vllm/env_override.py</text>
+            </g>
+
+            <g class="node" data-id="cuda_graph" data-layer="compile" transform="translate(320 320)" data-title="CUDA Graph Capture" data-link="../../vllm/compilation/cuda_graph.py" data-desc="CUDAGraph capture + replay. Used to stabilize decode paths and reduce launch overhead.">
+              <rect width="200" height="90" />
+              <text class="title" x="14" y="28">CUDA Graph</text>
+              <text x="14" y="50">vllm/compilation</text>
+              <text x="14" y="66">cuda_graph.py</text>
+            </g>
+
+            <g class="node" data-id="quant" data-layer="quant" transform="translate(80 520)" data-title="Quant + MoE" data-link="../../vllm/model_executor/layers/" data-desc="Quantized GEMMs (AWQ/GPTQ/Marlin/Machete) and fused MoE kernels.">
+              <rect width="180" height="90" />
+              <text class="title" x="14" y="28">Quant + MoE</text>
+              <text x="14" y="50">vllm/model_executor</text>
+              <text x="14" y="66">layers/quantization</text>
+            </g>
+          </g>
+        </svg>
+      </main>
+
+      <aside class="panel">
+        <div class="section">
+          <h2>Focus</h2>
+          <div class="details" id="details">
+            <div class="pill">click a node</div>
+            <p>Pick a node to see its role and jump to the source file.</p>
+          </div>
+        </div>
+        <div class="section">
+          <h2>Quick Notes</h2>
+          <div class="details">
+            <p>
+              <span class="pill">paged attention</span>
+              The Python wrappers in <code>vllm/_custom_ops.py</code> call into
+              compiled kernels registered by <code>vllm/_C.abi3.so</code>.
+            </p>
+            <p>
+              <span class="pill">backend choice</span>
+              CUDA uses backend priorities in <code>vllm/platforms/cuda.py</code>
+              and the registry in <code>vllm/v1/attention/backends/registry.py</code>.
+            </p>
+            <p>
+              <span class="pill">cudagraph</span>
+              When enabled, attention backends expose capture-aware paths to
+              reduce launch overhead.
+            </p>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <script>
+      const nodes = [...document.querySelectorAll('.node')];
+      const edges = [...document.querySelectorAll('.edge')];
+      const details = document.getElementById('details');
+      const searchInput = document.querySelector('.search');
+      const layerBoxes = [...document.querySelectorAll('[data-layer]')]
+        .filter((el) => el.tagName === 'INPUT');
+
+      let activeNodeId = null;
+
+      function updateDetails(node) {
+        const title = node.dataset.title || 'node';
+        const desc = node.dataset.desc || '';
+        const link = node.dataset.link || '';
+        details.innerHTML = `
+          <div class="pill">${node.dataset.layer || 'node'}</div>
+          <h3 style="margin: 8px 0 6px; font-size: 16px;">${title}</h3>
+          <p>${desc}</p>
+          <p><a href="${link}" target="_blank" rel="noreferrer">open ${link}</a></p>
+        `;
+      }
+
+      function clearActive() {
+        nodes.forEach((n) => n.classList.remove('active'));
+        edges.forEach((e) => e.classList.remove('active'));
+        activeNodeId = null;
+      }
+
+      function highlightEdges(nodeId) {
+        edges.forEach((edge) => {
+          const from = edge.dataset.from;
+          const to = edge.dataset.to;
+          const active = from === nodeId || to === nodeId;
+          edge.classList.toggle('active', active);
+        });
+      }
+
+      function setActiveNode(node) {
+        clearActive();
+        node.classList.add('active');
+        activeNodeId = node.dataset.id;
+        highlightEdges(activeNodeId);
+        updateDetails(node);
+      }
+
+      nodes.forEach((node) => {
+        node.addEventListener('click', () => setActiveNode(node));
+      });
+
+      document.getElementById('clearFocus').addEventListener('click', () => {
+        clearActive();
+        details.innerHTML = '<div class="pill">click a node</div><p>Pick a node to see its role and jump to the source file.</p>';
+      });
+
+      function updateLayers() {
+        const enabled = new Set(
+          layerBoxes.filter((box) => box.checked).map((box) => box.dataset.layer)
+        );
+        nodes.forEach((node) => {
+          const show = enabled.has(node.dataset.layer);
+          node.style.display = show ? 'block' : 'none';
+        });
+        edges.forEach((edge) => {
+          const from = document.querySelector(`[data-id="${edge.dataset.from}"]`);
+          const to = document.querySelector(`[data-id="${edge.dataset.to}"]`);
+          const show = from && to && from.style.display !== 'none' && to.style.display !== 'none';
+          edge.style.display = show ? 'block' : 'none';
+        });
+      }
+
+      layerBoxes.forEach((box) => box.addEventListener('change', updateLayers));
+
+      function updateSearch() {
+        const q = searchInput.value.trim().toLowerCase();
+        if (!q) {
+          nodes.forEach((node) => node.classList.remove('hidden'));
+          return;
+        }
+        nodes.forEach((node) => {
+          const blob = `${node.dataset.title} ${node.dataset.desc} ${node.dataset.link}`
+            .toLowerCase();
+          node.classList.toggle('hidden', !blob.includes(q));
+        });
+      }
+
+      searchInput.addEventListener('input', updateSearch);
+
+      const canvas = document.getElementById('canvas');
+      let view = { x: 0, y: 0, scale: 1 };
+      let drag = null;
+
+      function setTransform() {
+        canvas.setAttribute('transform', `translate(${view.x} ${view.y}) scale(${view.scale})`);
+      }
+
+      const svg = document.querySelector('svg');
+
+      svg.addEventListener('wheel', (event) => {
+        event.preventDefault();
+        const delta = -event.deltaY * 0.001;
+        const next = Math.min(1.8, Math.max(0.6, view.scale + delta));
+        view.scale = next;
+        setTransform();
+      });
+
+      svg.addEventListener('pointerdown', (event) => {
+        if (event.button !== 0) return;
+        drag = { x: event.clientX, y: event.clientY, vx: view.x, vy: view.y };
+      });
+
+      svg.addEventListener('pointermove', (event) => {
+        if (!drag) return;
+        view.x = drag.vx + (event.clientX - drag.x);
+        view.y = drag.vy + (event.clientY - drag.y);
+        setTransform();
+      });
+
+      svg.addEventListener('pointerup', () => {
+        drag = null;
+      });
+
+      document.getElementById('resetView').addEventListener('click', () => {
+        view = { x: 0, y: 0, scale: 1 };
+        setTransform();
+      });
+
+      updateLayers();
+      setTransform();
+    </script>
+  </body>
+</html>
