@@ -23,8 +23,14 @@ REAL_UID="$(id -u)"
 REAL_GID="$(id -g)"
 KVOTHE_UID="${REAL_UID}"
 KVOTHE_GID="${REAL_GID}"
+ZSH_BIN="$(command -v zsh || true)"
 
 mkdir -p "${FAKE_BIN}" "${STATE_DIR}" "${RUNTIME_DIR}" "${LOGIN_HOME}" "${TEMPLATE_DIR}"
+
+if [ -z "${ZSH_BIN}" ]; then
+  echo "missing zsh binary for tmux login verification" >&2
+  exit 1
+fi
 
 cat >"${AUTHORIZED_KEYS}" <<'EOF'
 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKvotheTestKey devx-test
@@ -36,6 +42,34 @@ EOF
 
 cat >"${TEMPLATE_DIR}/.zshenv" <<'EOF'
 export FROM_TEMPLATE_ZSHENV=1
+EOF
+
+mkdir -p "${TEMPLATE_DIR}/.local/share/devx"
+cat >"${TEMPLATE_DIR}/.local/share/devx/tmux-auto-attach.zsh" <<'EOF'
+devx_tmux_auto_attach() {
+  if [[ ! -o interactive || ! -o login ]]; then
+    return 0
+  fi
+
+  if [[ "${TMUX_AUTO_ATTACH:-1}" = 0 ]]; then
+    return 0
+  fi
+
+  if ! command -v tmux >/dev/null 2>&1; then
+    return 0
+  fi
+
+  exec tmux new-session -A -s main
+}
+
+devx_tmux_auto_attach
+unset -f devx_tmux_auto_attach
+EOF
+
+cat >"${TEMPLATE_DIR}/.zprofile" <<'EOF'
+if [[ -r "$HOME/.local/share/devx/tmux-auto-attach.zsh" ]]; then
+  source "$HOME/.local/share/devx/tmux-auto-attach.zsh"
+fi
 EOF
 
 mkdir -p "${TEMPLATE_DIR}/.tmux"
@@ -203,6 +237,14 @@ printf '%s\n' "${type}" > "${outfile}.type"
 printf '%s\n' "ssh-${type} devx-test" > "${outfile}.pub"
 EOF
 
+cat >"${FAKE_BIN}/tmux" <<EOF
+#!/bin/bash
+set -euo pipefail
+
+printf '%s\n' "\$*" >> "${TEST_ROOT}/tmux.log"
+exit 0
+EOF
+
 cat >"${FAKE_BIN}/sshd" <<EOF
 #!/bin/bash
 set -euo pipefail
@@ -238,7 +280,7 @@ printf '%s\n' "sshd-started" > "${SSHD_LOG}"
 exit 0
 EOF
 
-chmod +x "${FAKE_BIN}/id" "${FAKE_BIN}/getent" "${FAKE_BIN}/install" "${FAKE_BIN}/chown" "${FAKE_BIN}/ssh-keygen" "${FAKE_BIN}/sshd"
+chmod +x "${FAKE_BIN}/id" "${FAKE_BIN}/getent" "${FAKE_BIN}/install" "${FAKE_BIN}/chown" "${FAKE_BIN}/ssh-keygen" "${FAKE_BIN}/tmux" "${FAKE_BIN}/sshd"
 
 export PATH="${FAKE_BIN}:${PATH}"
 
@@ -279,6 +321,35 @@ done
   exit 1
 }
 
+[ "$(cat "${LOGIN_HOME}/.zprofile")" = 'if [[ -r "$HOME/.local/share/devx/tmux-auto-attach.zsh" ]]; then
+  source "$HOME/.local/share/devx/tmux-auto-attach.zsh"
+fi' ] || {
+  echo "missing initial zprofile seed" >&2
+  exit 1
+}
+
+[ "$(cat "${LOGIN_HOME}/.local/share/devx/tmux-auto-attach.zsh")" = 'devx_tmux_auto_attach() {
+  if [[ ! -o interactive || ! -o login ]]; then
+    return 0
+  fi
+
+  if [[ "${TMUX_AUTO_ATTACH:-1}" = 0 ]]; then
+    return 0
+  fi
+
+  if ! command -v tmux >/dev/null 2>&1; then
+    return 0
+  fi
+
+  exec tmux new-session -A -s main
+}
+
+devx_tmux_auto_attach
+unset -f devx_tmux_auto_attach' ] || {
+  echo "missing initial tmux auto-attach helper seed" >&2
+  exit 1
+}
+
 grep -q "${LOGIN_HOME}/.zshenv" "${CHOWN_LOG}" || {
   echo "missing ownership repair for seeded zshenv" >&2
   cat "${CHOWN_LOG}" >&2
@@ -297,6 +368,70 @@ grep -q "${LOGIN_HOME}/.zshenv" "${CHOWN_LOG}" || {
 
 if [ -e "${LOGIN_HOME}/.zshrc" ] && [ "$(cat "${LOGIN_HOME}/.zshrc")" = 'export FROM_TEMPLATE=1' ]; then
   echo "template file replaced preexisting home file" >&2
+  exit 1
+fi
+
+: >"${TEST_ROOT}/tmux.log"
+env HOME="${LOGIN_HOME}" \
+  ZDOTDIR="${LOGIN_HOME}" \
+  PATH="${FAKE_BIN}:${PATH}" \
+  "${ZSH_BIN}" -lic 'printf "%s\n" "should-not-print"' \
+  >"${TEST_ROOT}/interactive.stdout" \
+  2>"${TEST_ROOT}/interactive.stderr" \
+  <<<""
+
+[ "$(cat "${TEST_ROOT}/tmux.log")" = 'new-session -A -s main' ] || {
+  echo "interactive login shell did not auto-attach to tmux" >&2
+  cat "${TEST_ROOT}/tmux.log" >&2
+  exit 1
+}
+
+if [ -s "${TEST_ROOT}/interactive.stdout" ]; then
+  echo "interactive login shell unexpectedly executed the command after tmux attach" >&2
+  cat "${TEST_ROOT}/interactive.stdout" >&2
+  exit 1
+fi
+
+: >"${TEST_ROOT}/tmux.log"
+env HOME="${LOGIN_HOME}" \
+  ZDOTDIR="${LOGIN_HOME}" \
+  PATH="${FAKE_BIN}:${PATH}" \
+  "${ZSH_BIN}" -lc 'printf "%s\n" "ok"' \
+  >"${TEST_ROOT}/noninteractive.stdout" \
+  2>"${TEST_ROOT}/noninteractive.stderr" \
+  <<<""
+
+[ "$(cat "${TEST_ROOT}/noninteractive.stdout")" = 'ok' ] || {
+  echo "non-interactive login command did not print ok" >&2
+  cat "${TEST_ROOT}/noninteractive.stdout" >&2
+  exit 1
+}
+
+if [ -s "${TEST_ROOT}/tmux.log" ]; then
+  echo "non-interactive login command unexpectedly invoked tmux" >&2
+  cat "${TEST_ROOT}/tmux.log" >&2
+  exit 1
+fi
+
+: >"${TEST_ROOT}/tmux.log"
+env HOME="${LOGIN_HOME}" \
+  ZDOTDIR="${LOGIN_HOME}" \
+  PATH="${FAKE_BIN}:${PATH}" \
+  TMUX_AUTO_ATTACH=0 \
+  "${ZSH_BIN}" -lic 'printf "%s\n" "plain-shell"' \
+  >"${TEST_ROOT}/disabled.stdout" \
+  2>"${TEST_ROOT}/disabled.stderr" \
+  <<<""
+
+[ "$(cat "${TEST_ROOT}/disabled.stdout")" = 'plain-shell' ] || {
+  echo "TMUX_AUTO_ATTACH=0 did not preserve the shell" >&2
+  cat "${TEST_ROOT}/disabled.stdout" >&2
+  exit 1
+}
+
+if [ -s "${TEST_ROOT}/tmux.log" ]; then
+  echo "TMUX_AUTO_ATTACH=0 unexpectedly invoked tmux" >&2
+  cat "${TEST_ROOT}/tmux.log" >&2
   exit 1
 fi
 

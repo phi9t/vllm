@@ -68,6 +68,7 @@ RUN install -d -m 755 \
         /opt/devx/skel/.local \
         /opt/devx/skel/.local/bin \
         /opt/devx/skel/.local/share \
+        /opt/devx/skel/.local/share/devx \
         /opt/devx/skel/.local/state \
         /opt/devx/skel/.ssh \
         /opt/devx/skel/.tmux \
@@ -104,6 +105,33 @@ if [[ -o interactive ]]; then
 fi
 EOF
 
+RUN cat <<'EOF' >/opt/devx/skel/.zprofile
+if [[ -r "$HOME/.local/share/devx/tmux-auto-attach.zsh" ]]; then
+  source "$HOME/.local/share/devx/tmux-auto-attach.zsh"
+fi
+EOF
+
+RUN cat <<'EOF' >/opt/devx/skel/.local/share/devx/tmux-auto-attach.zsh
+devx_tmux_auto_attach() {
+  if [[ ! -o interactive || ! -o login ]]; then
+    return 0
+  fi
+
+  if [[ "${TMUX_AUTO_ATTACH:-1}" = 0 ]]; then
+    return 0
+  fi
+
+  if ! command -v tmux >/dev/null 2>&1; then
+    return 0
+  fi
+
+  exec tmux new-session -A -s main
+}
+
+devx_tmux_auto_attach
+unset -f devx_tmux_auto_attach
+EOF
+
 RUN cat <<'EOF' >/opt/devx/skel/.tmux/.tmux.conf
 set -g mouse on
 set -g history-limit 50000
@@ -112,7 +140,7 @@ setw -g mode-keys vi
 EOF
 
 RUN ln -sfn .tmux/.tmux.conf /opt/devx/skel/.tmux.conf && \
-    chmod 644 /opt/devx/skel/.zshenv /opt/devx/skel/.zshrc /opt/devx/skel/.tmux/.tmux.conf && \
+    chmod 644 /opt/devx/skel/.zshenv /opt/devx/skel/.zshrc /opt/devx/skel/.zprofile /opt/devx/skel/.local/share/devx/tmux-auto-attach.zsh /opt/devx/skel/.tmux/.tmux.conf && \
     chown -R "${USER_UID}:${USER_GID}" "/home/${USERNAME}"
 
 COPY devx/run_hermetic_sshd.sh /opt/devx/run_hermetic_sshd.sh

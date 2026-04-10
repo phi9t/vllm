@@ -192,6 +192,7 @@ seed_login_home() {
   for path in \
     "$LOGIN_HOME/.zshenv" \
     "$LOGIN_HOME/.zshrc" \
+    "$LOGIN_HOME/.zprofile" \
     "$LOGIN_HOME/.zsh_history" \
     "$LOGIN_HOME/.tmux.conf" \
     "$LOGIN_HOME/.tmux.conf.local" \
