@@ -19,6 +19,7 @@ HOSTKEY_RSA="${HOSTKEY_RSA:-$HOSTKEY_DIR/ssh_host_rsa_key}"
 PID_FILE="${PID_FILE:-$RUNTIME_DIR/sshd.pid}"
 LOG_DIR="${LOG_DIR:-$RUNTIME_DIR/logs}"
 LOG_FILE="${LOG_FILE:-$LOG_DIR/sshd.log}"
+RUNTIME_CONFIG_FILE="${RUNTIME_CONFIG_FILE:-$RUNTIME_DIR/sshd_config.runtime}"
 HOME_TEMPLATE_DIR="${HOME_TEMPLATE_DIR:-/opt/devx/skel}"
 HOST_SSH_DIR="${HOST_SSH_DIR:-/run/devx/host-ssh}"
 
@@ -109,6 +110,7 @@ seed_login_home() {
 
   local path
   for path in \
+    "$LOGIN_HOME/.zshenv" \
     "$LOGIN_HOME/.zshrc" \
     "$LOGIN_HOME/.zsh_history" \
     "$LOGIN_HOME/.tmux.conf" \
@@ -233,10 +235,6 @@ if [ ! -f "$CONFIG_FILE" ]; then
 fi
 
 if [ ! -f "$AUTHORIZED_KEYS" ]; then
-  AUTHORIZED_KEYS="$ROOT_DIR/authorized_keys.placeholder"
-fi
-
-if [ ! -f "$AUTHORIZED_KEYS" ]; then
   echo "authorized_keys not found: $AUTHORIZED_KEYS" >&2
   exit 1
 fi
@@ -279,8 +277,6 @@ chmod 700 "$LOG_DIR"
 touch "$LOG_FILE"
 chmod 600 "$LOG_FILE"
 
-install -d -m 700 "$HOSTKEY_DIR"
-
 case "$HOSTKEY_DIR" in
   "$STATE_DIR"/*) ;;
   *)
@@ -288,6 +284,8 @@ case "$HOSTKEY_DIR" in
     exit 1
     ;;
 esac
+
+install -d -m 700 "$HOSTKEY_DIR"
 
 if [ ! -f "$HOSTKEY_ED25519" ]; then
   ssh-keygen -t ed25519 -f "$HOSTKEY_ED25519" -N ""
@@ -298,6 +296,30 @@ if [ ! -f "$HOSTKEY_RSA" ]; then
 fi
 
 chmod 600 "$HOSTKEY_ED25519" "$HOSTKEY_RSA" >/dev/null 2>&1 || true
+
+render_sshd_config() {
+  local template_config="$1"
+  local runtime_config="$2"
+
+  awk -v authorized_keys="$AUTHORIZED_KEYS" '
+    BEGIN { replaced = 0 }
+    /^[[:space:]]*AuthorizedKeysFile[[:space:]]+/ {
+      print "AuthorizedKeysFile " authorized_keys
+      replaced = 1
+      next
+    }
+    { print }
+    END {
+      if (replaced != 1) {
+        exit 1
+      }
+    }
+  ' "$template_config" >"$runtime_config"
+  chmod 644 "$runtime_config"
+}
+
+render_sshd_config "$CONFIG_FILE" "$RUNTIME_CONFIG_FILE"
+CONFIG_FILE="$RUNTIME_CONFIG_FILE"
 
 echo "Validating sshd config..."
 "$SSHD_BIN" -t -f "$CONFIG_FILE"

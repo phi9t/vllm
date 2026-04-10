@@ -16,6 +16,8 @@ AUTHORIZED_KEYS="${TEST_ROOT}/authorized_keys"
 CONFIG_FILE="${REPO_ROOT}/devx/sshd_config"
 SSHD_LOG="${TEST_ROOT}/sshd.log"
 SSHD_ARGS="${TEST_ROOT}/sshd.args"
+CHOWN_LOG="${TEST_ROOT}/chown.log"
+RUNTIME_CONFIG_FILE="${RUNTIME_DIR}/sshd_config.runtime"
 
 REAL_UID="$(id -u)"
 REAL_GID="$(id -g)"
@@ -161,8 +163,10 @@ perl -0pi -e "s|__SANDBOX_ROOT__|${TEST_ROOT}|g" "${FAKE_BIN}/install"
 cat >"${FAKE_BIN}/chown" <<'EOF'
 #!/bin/bash
 set -euo pipefail
+printf '%s\n' "$*" >> "__CHOWN_LOG__"
 exit 0
 EOF
+perl -0pi -e "s|__CHOWN_LOG__|${CHOWN_LOG}|g" "${FAKE_BIN}/chown"
 
 cat >"${FAKE_BIN}/ssh-keygen" <<'EOF'
 #!/bin/bash
@@ -222,6 +226,7 @@ if [ "\${1:-}" = "-t" ]; then
   grep -q '^PermitRootLogin no$' "\${config}"
   grep -q '^PubkeyAuthentication yes$' "\${config}"
   grep -q '^AuthenticationMethods publickey$' "\${config}"
+  grep -q "^AuthorizedKeysFile ${AUTHORIZED_KEYS}$" "\${config}"
   grep -q '^ClientAliveInterval 30$' "\${config}"
   grep -q '^ClientAliveCountMax 6$' "\${config}"
   grep -q '^AllowTcpForwarding yes$' "\${config}"
@@ -274,6 +279,12 @@ done
   exit 1
 }
 
+grep -q "${LOGIN_HOME}/.zshenv" "${CHOWN_LOG}" || {
+  echo "missing ownership repair for seeded zshenv" >&2
+  cat "${CHOWN_LOG}" >&2
+  exit 1
+}
+
 [ "$(cat "${LOGIN_HOME}/.tmux/.tmux.conf")" = 'set -g mouse on' ] || {
   echo "missing initial tmux seed" >&2
   exit 1
@@ -311,6 +322,17 @@ bash "${REPO_ROOT}/devx/start_main.sh"
 
 [ "$(cat "${LOGIN_HOME}/.tmux/.tmux.conf")" = 'set -g mouse on' ] || {
   echo "missing reseeded tmux file" >&2
+  exit 1
+}
+
+[ -f "${RUNTIME_CONFIG_FILE}" ] || {
+  echo "missing rendered runtime sshd config" >&2
+  exit 1
+}
+
+grep -q "^AuthorizedKeysFile ${AUTHORIZED_KEYS}$" "${RUNTIME_CONFIG_FILE}" || {
+  echo "runtime sshd config did not use the effective authorized-keys path" >&2
+  cat "${RUNTIME_CONFIG_FILE}" >&2
   exit 1
 }
 
@@ -426,6 +448,36 @@ fi
 grep -q 'does not match host gid' "${BAD_HOST_GID_STDERR}" || {
   echo "missing host-gid mismatch rejection" >&2
   cat "${BAD_HOST_GID_STDERR}" >&2
+  exit 1
+}
+
+BAD_HOSTKEY_DIR="${TEST_ROOT}/escape-hostkeys"
+BAD_HOSTKEY_STDERR="${TEST_ROOT}/bad-hostkey-dir.stderr"
+if HOST_UID="${KVOTHE_UID}" \
+  HOST_GID="${KVOTHE_GID}" \
+  CONFIG_FILE="${CONFIG_FILE}" \
+  AUTHORIZED_KEYS="${AUTHORIZED_KEYS}" \
+  HOME_TEMPLATE_DIR="${TEMPLATE_DIR}" \
+  RUNTIME_DIR="${RUNTIME_DIR}" \
+  STATE_DIR="${STATE_DIR}" \
+  HOSTKEY_DIR="${BAD_HOSTKEY_DIR}" \
+  LOGIN_USER=kvothe \
+  PORT=27722 \
+  SSHD_BIN="${FAKE_BIN}/sshd" \
+  bash "${REPO_ROOT}/devx/run_hermetic_sshd.sh" >"${TEST_ROOT}/bad-hostkey-dir.stdout" 2>"${BAD_HOSTKEY_STDERR}"; then
+  echo "run_hermetic_sshd.sh unexpectedly accepted HOSTKEY_DIR outside STATE_DIR" >&2
+  exit 1
+fi
+
+grep -q 'HOSTKEY_DIR must live under STATE_DIR' "${BAD_HOSTKEY_STDERR}" || {
+  echo "missing hostkey-dir guard rejection" >&2
+  cat "${BAD_HOSTKEY_STDERR}" >&2
+  exit 1
+}
+
+[ ! -e "${BAD_HOSTKEY_DIR}" ] || {
+  echo "hostkey guard created a directory before failing" >&2
+  find "${BAD_HOSTKEY_DIR}" -maxdepth 2 -print >&2
   exit 1
 }
 

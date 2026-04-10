@@ -18,7 +18,7 @@ PermitEmptyPasswords no
 ChallengeResponseAuthentication no
 PubkeyAuthentication yes
 KbdInteractiveAuthentication no
-AuthorizedKeysFile /run/devx/authorized_keys
+AuthorizedKeysFile __DEVX_AUTHORIZED_KEYS__
 HostbasedAuthentication no
 AuthenticationMethods publickey
 AllowUsers kvothe
