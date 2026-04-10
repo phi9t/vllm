@@ -115,13 +115,12 @@ RUN ln -sfn .tmux/.tmux.conf /opt/devx/skel/.tmux.conf && \
     chmod 644 /opt/devx/skel/.zshenv /opt/devx/skel/.zshrc /opt/devx/skel/.tmux/.tmux.conf && \
     chown -R "${USER_UID}:${USER_GID}" "/home/${USERNAME}"
 
-COPY devx/authorized_keys /opt/devx/authorized_keys
 COPY devx/run_hermetic_sshd.sh /opt/devx/run_hermetic_sshd.sh
 COPY devx/sshd_config /opt/devx/sshd_config
 COPY devx/start_main.sh /opt/devx/start_main.sh
 
 RUN chmod 755 /opt/devx/run_hermetic_sshd.sh /opt/devx/start_main.sh && \
-    chmod 644 /opt/devx/authorized_keys /opt/devx/sshd_config
+    chmod 644 /opt/devx/sshd_config
 
 WORKDIR /workspace
 
