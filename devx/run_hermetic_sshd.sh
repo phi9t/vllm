@@ -71,6 +71,86 @@ LOGIN_HOME="$(getent passwd "$LOGIN_USER" | cut -d: -f6)"
 LOGIN_UID="$(id -u "$LOGIN_USER")"
 LOGIN_GID="$(id -g "$LOGIN_USER")"
 
+normalize_abs_path() {
+  local path="$1"
+  local dir base normalized_dir
+
+  case "$path" in
+    /)
+      printf '/\n'
+      return 0
+      ;;
+  esac
+
+  if [ -e "$path" ] || [ -L "$path" ]; then
+    dir="$(dirname "$path")"
+    base="$(basename "$path")"
+    printf '%s/%s\n' "$(cd "$dir" && pwd -P)" "$base"
+    return 0
+  fi
+
+  dir="$(dirname "$path")"
+  if [ "$dir" = "$path" ]; then
+    return 1
+  fi
+
+  normalized_dir="$(normalize_abs_path "$dir")" || return 1
+  printf '%s/%s\n' "$normalized_dir" "$(basename "$path")"
+}
+
+validate_hostkey_paths() {
+  local canonical_state_dir canonical_hostkey_dir canonical_hostkey_ed25519 canonical_hostkey_rsa
+
+  canonical_state_dir="$(normalize_abs_path "$STATE_DIR")" || {
+    echo "run_hermetic_sshd: unable to normalize STATE_DIR ($STATE_DIR)" >&2
+    exit 1
+  }
+
+  canonical_hostkey_dir="$(normalize_abs_path "$HOSTKEY_DIR")" || {
+    echo "run_hermetic_sshd: unable to normalize HOSTKEY_DIR ($HOSTKEY_DIR)" >&2
+    exit 1
+  }
+
+  case "$canonical_hostkey_dir" in
+    "$canonical_state_dir"|"$canonical_state_dir"/*) ;;
+    *)
+      echo "run_hermetic_sshd: HOSTKEY_DIR must live under STATE_DIR (got $HOSTKEY_DIR, state root $STATE_DIR)" >&2
+      exit 1
+      ;;
+  esac
+
+  canonical_hostkey_ed25519="$(normalize_abs_path "$HOSTKEY_ED25519")" || {
+    echo "run_hermetic_sshd: unable to normalize HOSTKEY_ED25519 ($HOSTKEY_ED25519)" >&2
+    exit 1
+  }
+
+  canonical_hostkey_rsa="$(normalize_abs_path "$HOSTKEY_RSA")" || {
+    echo "run_hermetic_sshd: unable to normalize HOSTKEY_RSA ($HOSTKEY_RSA)" >&2
+    exit 1
+  }
+
+  case "$canonical_hostkey_ed25519" in
+    "$canonical_hostkey_dir"|"$canonical_hostkey_dir"/*) ;;
+    *)
+      echo "run_hermetic_sshd: HOSTKEY_ED25519 must live under HOSTKEY_DIR (got $HOSTKEY_ED25519, hostkey dir $HOSTKEY_DIR)" >&2
+      exit 1
+      ;;
+  esac
+
+  case "$canonical_hostkey_rsa" in
+    "$canonical_hostkey_dir"|"$canonical_hostkey_dir"/*) ;;
+    *)
+      echo "run_hermetic_sshd: HOSTKEY_RSA must live under HOSTKEY_DIR (got $HOSTKEY_RSA, hostkey dir $HOSTKEY_DIR)" >&2
+      exit 1
+      ;;
+  esac
+
+  STATE_DIR="$canonical_state_dir"
+  HOSTKEY_DIR="$canonical_hostkey_dir"
+  HOSTKEY_ED25519="$canonical_hostkey_ed25519"
+  HOSTKEY_RSA="$canonical_hostkey_rsa"
+}
+
 seed_login_home() {
   local seed_marker="$LOGIN_HOME/.devx_home_seeded_v1"
   local template_entry template_name template_target
@@ -230,6 +310,8 @@ if [ "$LOGIN_GID" != "$HOST_GID" ]; then
   exit 1
 fi
 
+validate_hostkey_paths
+
 if [ ! -f "$CONFIG_FILE" ]; then
   CONFIG_FILE="$ROOT_DIR/sshd_config"
 fi
@@ -271,20 +353,12 @@ if [ "$login_home_mode" != "700" ]; then
   exit 1
 fi
 
-install -d -m 700 "$RUNTIME_DIR"
 mkdir -p "$LOG_DIR"
 chmod 700 "$LOG_DIR"
 touch "$LOG_FILE"
 chmod 600 "$LOG_FILE"
 
-case "$HOSTKEY_DIR" in
-  "$STATE_DIR"/*) ;;
-  *)
-    echo "run_hermetic_sshd: HOSTKEY_DIR must live under STATE_DIR (got $HOSTKEY_DIR, state root $STATE_DIR)" >&2
-    exit 1
-    ;;
-esac
-
+install -d -m 700 "$RUNTIME_DIR"
 install -d -m 700 "$HOSTKEY_DIR"
 
 if [ ! -f "$HOSTKEY_ED25519" ]; then

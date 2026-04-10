@@ -518,4 +518,80 @@ grep -q 'HOSTKEY_DIR must live under STATE_DIR' "${BAD_HOSTKEY_STDERR}" || {
   exit 1
 }
 
+BAD_HOSTKEY_ED25519="${TEST_ROOT}/escape-hostkeys/../escape-ed25519/ssh_host_ed25519_key"
+BAD_HOSTKEY_ED25519_STDERR="${TEST_ROOT}/bad-hostkey-ed25519.stderr"
+: >"${CHOWN_LOG}"
+if HOST_UID="${KVOTHE_UID}" \
+  HOST_GID="${KVOTHE_GID}" \
+  CONFIG_FILE="${CONFIG_FILE}" \
+  AUTHORIZED_KEYS="${AUTHORIZED_KEYS}" \
+  HOME_TEMPLATE_DIR="${TEMPLATE_DIR}" \
+  RUNTIME_DIR="${RUNTIME_DIR}" \
+  STATE_DIR="${STATE_DIR}" \
+  HOSTKEY_DIR="${STATE_DIR}/hostkeys" \
+  HOSTKEY_ED25519="${BAD_HOSTKEY_ED25519}" \
+  LOGIN_USER=kvothe \
+  PORT=27722 \
+  SSHD_BIN="${FAKE_BIN}/sshd" \
+  bash "${REPO_ROOT}/devx/run_hermetic_sshd.sh" >"${TEST_ROOT}/bad-hostkey-ed25519.stdout" 2>"${BAD_HOSTKEY_ED25519_STDERR}"; then
+  echo "run_hermetic_sshd.sh unexpectedly accepted HOSTKEY_ED25519 outside HOSTKEY_DIR" >&2
+  exit 1
+fi
+
+grep -q 'HOSTKEY_ED25519 must live under HOSTKEY_DIR' "${BAD_HOSTKEY_ED25519_STDERR}" || {
+  echo "missing hostkey-ed25519 guard rejection" >&2
+  cat "${BAD_HOSTKEY_ED25519_STDERR}" >&2
+  exit 1
+}
+
+[ ! -e "${TEST_ROOT}/escape-ed25519" ] || {
+  echo "hostkey-ed25519 guard created a directory before failing" >&2
+  find "${TEST_ROOT}/escape-ed25519" -maxdepth 2 -print >&2
+  exit 1
+}
+
+[ ! -s "${CHOWN_LOG}" ] || {
+  echo "hostkey-ed25519 override mutated state before failing" >&2
+  cat "${CHOWN_LOG}" >&2
+  exit 1
+}
+
+BAD_HOSTKEY_RSA="${TEST_ROOT}/escape-hostkeys/../escape-rsa/ssh_host_rsa_key"
+BAD_HOSTKEY_RSA_STDERR="${TEST_ROOT}/bad-hostkey-rsa.stderr"
+: >"${CHOWN_LOG}"
+if HOST_UID="${KVOTHE_UID}" \
+  HOST_GID="${KVOTHE_GID}" \
+  CONFIG_FILE="${CONFIG_FILE}" \
+  AUTHORIZED_KEYS="${AUTHORIZED_KEYS}" \
+  HOME_TEMPLATE_DIR="${TEMPLATE_DIR}" \
+  RUNTIME_DIR="${RUNTIME_DIR}" \
+  STATE_DIR="${STATE_DIR}" \
+  HOSTKEY_DIR="${STATE_DIR}/hostkeys" \
+  HOSTKEY_RSA="${BAD_HOSTKEY_RSA}" \
+  LOGIN_USER=kvothe \
+  PORT=27722 \
+  SSHD_BIN="${FAKE_BIN}/sshd" \
+  bash "${REPO_ROOT}/devx/run_hermetic_sshd.sh" >"${TEST_ROOT}/bad-hostkey-rsa.stdout" 2>"${BAD_HOSTKEY_RSA_STDERR}"; then
+  echo "run_hermetic_sshd.sh unexpectedly accepted HOSTKEY_RSA outside HOSTKEY_DIR" >&2
+  exit 1
+fi
+
+grep -q 'HOSTKEY_RSA must live under HOSTKEY_DIR' "${BAD_HOSTKEY_RSA_STDERR}" || {
+  echo "missing hostkey-rsa guard rejection" >&2
+  cat "${BAD_HOSTKEY_RSA_STDERR}" >&2
+  exit 1
+}
+
+[ ! -e "${TEST_ROOT}/escape-rsa" ] || {
+  echo "hostkey-rsa guard created a directory before failing" >&2
+  find "${TEST_ROOT}/escape-rsa" -maxdepth 2 -print >&2
+  exit 1
+}
+
+[ ! -s "${CHOWN_LOG}" ] || {
+  echo "hostkey-rsa override mutated state before failing" >&2
+  cat "${CHOWN_LOG}" >&2
+  exit 1
+}
+
 echo "PASS"
