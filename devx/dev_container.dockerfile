@@ -121,12 +121,6 @@ devx_tmux_auto_attach() {
     return 0
   fi
 
-  case "${TERM:-}" in
-    tmux*|screen*)
-      return 0
-      ;;
-  esac
-
   if ps -o comm= -p "$PPID" 2>/dev/null | grep -q '^tmux'; then
     return 0
   fi

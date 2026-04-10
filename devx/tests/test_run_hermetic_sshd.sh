@@ -55,12 +55,6 @@ devx_tmux_auto_attach() {
     return 0
   fi
 
-  case "${TERM:-}" in
-    tmux*|screen*)
-      return 0
-      ;;
-  esac
-
   if ps -o comm= -p "$PPID" 2>/dev/null | grep -q '^tmux'; then
     return 0
   fi
@@ -100,6 +94,28 @@ ln -sfn .tmux/.tmux.conf "${TEMPLATE_DIR}/.tmux.conf"
 
 cat >"${LOGIN_HOME}/.zshrc" <<'EOF'
 export KEEP_ME=1
+EOF
+
+mkdir -p "${LOGIN_HOME}/.local/share/devx"
+cat >"${LOGIN_HOME}/.local/share/devx/tmux-auto-attach.zsh" <<'EOF'
+devx_tmux_auto_attach() {
+  if [[ ! -o interactive || ! -o login ]]; then
+    return 0
+  fi
+
+  if [[ "${TMUX_AUTO_ATTACH:-1}" = 0 ]]; then
+    return 0
+  fi
+
+  if ! command -v tmux >/dev/null 2>&1; then
+    return 0
+  fi
+
+  exec tmux new-session -A -s main
+}
+
+devx_tmux_auto_attach
+unset -f devx_tmux_auto_attach
 EOF
 
 cat >"${FAKE_BIN}/id" <<EOF
@@ -347,7 +363,8 @@ fi' ] || {
   exit 1
 }
 
-[ "$(cat "${LOGIN_HOME}/.local/share/devx/tmux-auto-attach.zsh")" = 'devx_tmux_auto_attach() {
+tmux_helper_expected="$(cat <<'EOF'
+devx_tmux_auto_attach() {
   if [[ ! -o interactive || ! -o login ]]; then
     return 0
   fi
@@ -355,12 +372,6 @@ fi' ] || {
   if [[ -n "${TMUX:-}" ]]; then
     return 0
   fi
-
-  case "${TERM:-}" in
-    tmux*|screen*)
-      return 0
-      ;;
-  esac
 
   if ps -o comm= -p "$PPID" 2>/dev/null | grep -q '^tmux'; then
     return 0
@@ -382,7 +393,12 @@ fi' ] || {
 }
 
 devx_tmux_auto_attach
-unset -f devx_tmux_auto_attach' ] || {
+unset -f devx_tmux_auto_attach
+EOF
+)"
+
+[ "$(cat "${LOGIN_HOME}/.local/share/devx/tmux-auto-attach.zsh")" = \
+  "${tmux_helper_expected}" ] || {
   echo "missing initial tmux auto-attach helper seed" >&2
   exit 1
 }
@@ -413,6 +429,7 @@ fi
 env HOME="${LOGIN_HOME}" \
   ZDOTDIR="${LOGIN_HOME}" \
   PATH="${FAKE_BIN}:${PATH}" \
+  TMUX="" \
   "${ZSH_BIN}" -lic 'printf "%s\n" "should-not-print"' \
   >"${TEST_ROOT}/interactive.stdout" \
   2>"${TEST_ROOT}/interactive.stderr" \
@@ -434,6 +451,7 @@ fi
 env HOME="${LOGIN_HOME}" \
   ZDOTDIR="${LOGIN_HOME}" \
   PATH="${FAKE_BIN}:${PATH}" \
+  TMUX="" \
   "${ZSH_BIN}" -lc 'printf "%s\n" "ok"' \
   >"${TEST_ROOT}/noninteractive.stdout" \
   2>"${TEST_ROOT}/noninteractive.stderr" \
@@ -455,6 +473,7 @@ fi
 env HOME="${LOGIN_HOME}" \
   ZDOTDIR="${LOGIN_HOME}" \
   PATH="${FAKE_BIN}:${PATH}" \
+  TMUX="" \
   TMUX_AUTO_ATTACH=0 \
   "${ZSH_BIN}" -lic 'printf "%s\n" "plain-shell"' \
   >"${TEST_ROOT}/disabled.stdout" \

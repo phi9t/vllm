@@ -216,6 +216,21 @@ seed_login_home() {
   find "$LOGIN_HOME/.ssh" -type f -exec chmod 600 {} +
 }
 
+sync_managed_devx_shell_files() {
+  local helper_source="$HOME_TEMPLATE_DIR/.local/share/devx/tmux-auto-attach.zsh"
+  local helper_target="$LOGIN_HOME/.local/share/devx/tmux-auto-attach.zsh"
+
+  if [ ! -f "$helper_source" ]; then
+    return 0
+  fi
+
+  install -d -m 755 -o "$LOGIN_UID" -g "$LOGIN_GID" \
+    "$(dirname "$helper_target")"
+  cp -f "$helper_source" "$helper_target"
+  chown "$LOGIN_UID:$LOGIN_GID" "$helper_target"
+  chmod 644 "$helper_target"
+}
+
 migrate_legacy_ssh_material() {
   local backup_dir="$LOGIN_HOME/.ssh.legacy-devx-backup"
   local marker_file="$LOGIN_HOME/.devx_home_migration_v1"
@@ -334,6 +349,7 @@ if [ ! -d "$LOGIN_HOME" ]; then
 fi
 
 seed_login_home
+sync_managed_devx_shell_files
 if [ "${ALLOW_LEGACY_HOME_MIGRATION:-0}" = "1" ]; then
   migrate_legacy_ssh_material
 fi
