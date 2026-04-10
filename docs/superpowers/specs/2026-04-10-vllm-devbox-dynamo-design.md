@@ -27,6 +27,9 @@ than a disposable container.
   persistence.
 - Share large reusable caches, especially Hugging Face cache, across host and
   containers.
+- Make the first version strong on GPU, IPC, and SHM so both interactive
+  development and inference workloads can run without artificially constrained
+  container defaults.
 
 ## Non-goals
 
@@ -73,6 +76,29 @@ Responsibilities:
 Any Dynamo UI remains internal-only and is accessed via SSH port forwarding
 through `main` if needed.
 
+### Dynamo v1 contract
+
+The first version must stop calling Dynamo “minimal” in the abstract and define
+the actual contract:
+
+- source of truth is `ai-dynamo/dynamo`
+- the stack contains only the Dynamo frontend plus the exact mandatory support
+  services it needs to route to one local vLLM backend
+- all Dynamo startup logic lives behind repo-owned wrapper scripts
+- no Kubernetes assumption exists in version one even if upstream docs are
+  Kubernetes-first
+
+Success criteria for v1:
+
+1. direct request to `vllm-runtime` succeeds on the Compose network
+2. request through the Dynamo frontend also succeeds
+3. the response proves Dynamo reached the local vLLM backend rather than some
+   unrelated model service
+
+If upstream Dynamo packaging makes this impossible without a larger topology,
+the wrappers must fail loudly and document the missing dependency rather than
+silently broadening scope.
+
 ## Network Model
 
 - All services are on the same private Compose network.
@@ -81,6 +107,35 @@ through `main` if needed.
 - `vllm-runtime` and Dynamo endpoints are internal-only.
 - All containers retain outbound internet access for package installs, Git
   operations, model downloads, and API access.
+
+## GPU, IPC, and SHM Model
+
+This environment is explicitly performance-oriented rather than default-safe.
+
+### GPU policy
+
+- `vllm-runtime` gets dedicated GPU access and is the primary serving workload
+- `main` is CUDA-capable and may access the same GPU family for development,
+  debugging, and local verification
+- first version should default to making the same visible GPU set available to
+  `main` and `vllm-runtime`, then narrow that later only if contention proves
+  painful
+- exact device selection must be controlled through env values, not hard-coded
+
+### IPC policy
+
+- inference-oriented containers should use strong IPC semantics equivalent to
+  host IPC or another explicitly large-capacity configuration
+- the design must not rely on Docker defaults for CUDA inference workloads
+
+### SHM policy
+
+- `main` and `vllm-runtime` require explicitly large shared memory settings
+- version one should optimize for not falling over under heavy development or
+  inference demand rather than for minimal host footprint
+
+This section exists because weak container IPC/SHM defaults are a known source
+of vLLM friction.
 
 ## SSH and Interactive Model
 
@@ -100,12 +155,15 @@ Required SSH behavior:
 ### Jump-host model
 
 The host machine remains the real SSH endpoint from the outside. The container
-has its own stable host keys and is reached through the host as a jump target.
+has its own stable host keys. The baseline access mode is direct SSH to the
+loopback-published container port from the host itself, with `ProxyJump` as the
+remote-access pattern when the host is itself being SSHed into.
 
 Recommended pattern:
 
 - host forwards `127.0.0.1:2222` to `main:22`
-- user connects with `ProxyJump` through the host
+- local users may connect directly to that loopback port
+- remote users may connect with `ProxyJump` through the host
 - host and container use separate host keys
 
 This avoids reusing the host's SSH host identity inside the container while
@@ -130,7 +188,7 @@ tmux is part of the core product of the devbox, not an optional convenience.
 Use one consistent non-root user everywhere:
 
 - username: `kvothe`
-- same UID:GID in all cooperating containers
+- same host-mapped UID:GID in all cooperating containers
 - same ownership expectations on shared bind mounts
 
 Rationale:
@@ -141,6 +199,10 @@ Rationale:
 
 All cooperating containers that touch shared repo or cache state run as
 `kvothe`.
+
+The design inherits the current `devx` requirement that container UID:GID match
+the host UID:GID. This is not optional in version one because the repo, home,
+and caches are bind-mounted from the host.
 
 ## Source Layout and Mounting
 
@@ -198,6 +260,22 @@ Reasoning:
   state, editor state, and auth
 - the image should only seed missing files, never overwrite an existing home
 
+### Home drift policy
+
+Persisting the full home is a deliberate convenience tradeoff. To keep it from
+turning into an unsupported pet machine, version one adopts this policy:
+
+- the image owns only the skeleton in the image
+- the mounted home is user-owned state after first boot
+- bootstrap may add missing files and perform narrowly-scoped migrations, but
+  must not silently rewrite user-modified files
+- any intentional migration logic must be versioned and explicit
+- the stack must document a supported “reset home to skeleton” path for users
+  who want to start clean
+
+This keeps onboarding low-friction while acknowledging that full-home
+persistence weakens strict image parity over time.
+
 ### Other persisted state
 
 Under `~/.devx/special-circ-phi9t-vllm`, persist:
@@ -247,6 +325,19 @@ Rationale:
 - the environment is single-user and same-trust
 - secret material stays outside the repo and outside the image
 
+Managed-by-stack secrets in v1:
+
+- `HF_TOKEN`
+
+User-managed but expected-to-work state in the persistent home:
+
+- SSH client keys and config
+- Git config and credentials
+- Codex/Claude auth state
+- other personal CLI/tool auth material
+
+The stack should avoid trying to centralize all auth in version one.
+
 ## Image Strategy
 
 ### `vllm-runtime`
@@ -258,6 +349,27 @@ the minimum wiring needed for:
 - internal network integration
 - model configuration
 - cache and secret mounting
+
+### `vllm-runtime` code path contract
+
+The runtime must not be ambiguous about what code it is executing.
+
+Version one contract:
+
+- base image remains close to the official vLLM runtime image
+- mounted repo is read-only and available at a fixed path
+- startup logic explicitly chooses one of the supported execution paths rather
+  than mixing them implicitly
+
+Supported execution paths for experimentation:
+
+1. image-native path: run the vLLM already installed in the runtime image
+2. source-overlay path: build/install vLLM from the mounted source into the
+   runtime container's own Python environment at startup, then run that result
+
+The startup wrapper must print which path is active. Version one should keep
+both paths available so experimentation can determine which one is smoother,
+but each individual run must choose exactly one path.
 
 ### `main`
 
@@ -328,6 +440,19 @@ Default stack should bring up:
 The stack is intentionally small enough that one `docker compose up` should be
 the normal developer entrypoint.
 
+### Readiness contract
+
+Version one must define readiness explicitly:
+
+- `main` is ready when SSH is accepting connections
+- `vllm-runtime` is ready only when its health endpoint passes and the selected
+  model is actually loaded enough to serve requests
+- Dynamo services are ready only when they can successfully route a request to
+  `vllm-runtime`
+
+Cold start on first model download may be long. Dependent services should
+retry/wait based on health checks instead of assuming immediate availability.
+
 ## Host-side Control Surface
 
 Do not mount the host Docker socket into `main` in version one.
@@ -351,6 +476,22 @@ Initial commands should include:
 - `just ssh`
 - `just rebuild-main`
 - `just rebuild-runtime`
+
+## Relationship to existing `devx/`
+
+The current `devx/` stack is reference material, not ignored prior art.
+
+Version one should treat `devx/` this way:
+
+- reuse proven ideas such as host UID:GID mapping, SSH bootstrap, and persistent
+  state handling
+- do not blindly fork the entire `devx/` shape if it does not fit the new
+  vLLM-first design
+- make an explicit implementation-time decision whether the new stack extends
+  `devx/` or supersedes it
+
+The design intent is to avoid ending the repo with two permanently overlapping
+container systems that solve the same problem differently.
 
 ## Main entrypoint behavior
 
@@ -384,6 +525,13 @@ security boundary.
 Independent Python environments may increase startup or iteration cost. That is
 acceptable for version one; experimentation will determine whether further
 sharing is worth the complexity.
+
+### GPU contention
+
+Giving both `main` and `vllm-runtime` strong GPU/IPC/SHM access may cause
+contention. This is acceptable in version one because the goal is to optimize
+for a powerful personal environment first, then narrow constraints based on real
+usage.
 
 ### Dynamo packaging drift
 
