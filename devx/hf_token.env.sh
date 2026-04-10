@@ -1,17 +1,24 @@
 #!/bin/bash
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+load_hf_token_env() {
+  local script_dir hf_token_file hf_token
 
-# shellcheck disable=SC1091
-source "${SCRIPT_DIR}/lib/host_mounts.sh"
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-export_host_mount_context
+  # shellcheck disable=SC1091
+  source "${script_dir}/lib/host_mounts.sh"
 
-HF_TOKEN_FILE="${DEVX_HOST_SECRETS_DIR}/huggingface_token"
+  export_host_mount_context
 
-if [[ -r "${HF_TOKEN_FILE}" ]]; then
-  HF_TOKEN="$(tr -d '\r\n' < "${HF_TOKEN_FILE}")"
-  if [[ -n "${HF_TOKEN}" ]]; then
-    export HF_TOKEN
+  hf_token_file="${DEVX_HOST_SECRETS_DIR}/huggingface_token"
+
+  if [[ -r "${hf_token_file}" ]]; then
+    hf_token="$(tr -d '\r\n' < "${hf_token_file}")"
+    if [[ -n "${hf_token}" ]]; then
+      HF_TOKEN="${hf_token}"
+      export HF_TOKEN
+    fi
   fi
-fi
+}
+
+load_hf_token_env

@@ -80,15 +80,20 @@ assert_owner "${STATE_ROOT}/cache/pip"
 assert_owner "${STATE_ROOT}/cache/bazel"
 assert_owner "${HF_CACHE_ROOT}"
 
-HOME="${TEST_HOME}" bash -lc "
+printf 'hf_test_token\n' > "${STATE_ROOT}/secrets/huggingface_token"
+
+HOME="${TEST_HOME}" bash -c "
   set -euo pipefail
   source '${REPO_ROOT}/devx/lib/naming.sh'
   export_identity_context '${REPO_ROOT}'
   export_naming_context '${REPO_ROOT}/devx'
   source '${REPO_ROOT}/devx/lib/host_mounts.sh'
   export_host_mount_context
+  unset HF_TOKEN
   source '${REPO_ROOT}/devx/hf_token.env.sh'
+  [ \"\${HF_TOKEN:-}\" = 'hf_test_token' ]
   source '${REPO_ROOT}/devx/hf_token.env.sh'
+  [ \"\${HF_TOKEN:-}\" = 'hf_test_token' ]
 "
 
 echo "PASS"
