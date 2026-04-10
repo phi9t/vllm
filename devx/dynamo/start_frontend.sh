@@ -23,7 +23,31 @@ resolve_python_bin() {
     return 0
   fi
 
-  die "set DYNAMO_PYTHON_BIN to a Python interpreter with ai-dynamo installed; no repo-local interpreter found at ${repo_python}"
+  local path_python
+  for path_python in python3 python; do
+    if command -v "${path_python}" >/dev/null 2>&1; then
+      command -v "${path_python}"
+      return 0
+    fi
+  done
+
+  die "set DYNAMO_PYTHON_BIN or install python3/python with ai-dynamo on PATH; no repo-local interpreter found at ${repo_python}"
+}
+
+validate_file_kv_dir() {
+  local dir_path="$1"
+  local probe_file
+
+  [ -n "${dir_path}" ] || die "DYNAMO_FILE_KV must be set to the shared file-discovery directory"
+  [ -d "${dir_path}" ] || die "DYNAMO_FILE_KV does not exist or is not a directory: ${dir_path}"
+  [ -r "${dir_path}" ] || die "DYNAMO_FILE_KV is not readable: ${dir_path}"
+  [ -x "${dir_path}" ] || die "DYNAMO_FILE_KV is not searchable/executable as a directory: ${dir_path}"
+  [ -w "${dir_path}" ] || die "DYNAMO_FILE_KV is not writable: ${dir_path}"
+
+  probe_file="$(mktemp "${dir_path%/}/.dynamo-file-kv-probe.XXXXXX")" \
+    || die "DYNAMO_FILE_KV is not usable for shared file discovery writes: ${dir_path}"
+  rm -f "${probe_file}" \
+    || die "DYNAMO_FILE_KV probe cleanup failed; directory may be misconfigured: ${dir_path}"
 }
 
 require_python_module() {
@@ -48,10 +72,9 @@ DYNAMO_FRONTEND_HOST="${DYNAMO_FRONTEND_HOST:-0.0.0.0}"
 DYNAMO_FRONTEND_PORT="${DYNAMO_FRONTEND_PORT:-8000}"
 DYNAMO_FILE_KV="${DYNAMO_FILE_KV:-}"
 
-[ -n "${DYNAMO_FILE_KV}" ] || die "DYNAMO_FILE_KV must be set to the shared file-discovery directory"
-[ -d "${DYNAMO_FILE_KV}" ] || die "DYNAMO_FILE_KV does not exist or is not a directory: ${DYNAMO_FILE_KV}"
 [ "${DYNAMO_DISCOVERY_BACKEND}" = "file" ] || die "pinned local v1 topology only supports DYNAMO_DISCOVERY_BACKEND=file"
 [ "${DYNAMO_ROUTER_MODE}" = "round-robin" ] || die "pinned local v1 topology only supports DYNAMO_ROUTER_MODE=round-robin"
+validate_file_kv_dir "${DYNAMO_FILE_KV}"
 
 if ! require_python_module "${PYTHON_BIN}" "dynamo.frontend"; then
   die "upstream packaging is incompatible: ${PYTHON_BIN} cannot import dynamo.frontend"
