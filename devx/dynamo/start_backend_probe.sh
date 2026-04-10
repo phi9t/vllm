@@ -58,6 +58,7 @@ echo "${health_json}" | jq -e --arg endpoint "${EXPECTED_ENDPOINT}" \
   '(.endpoints // []) | index($endpoint) != null' >/dev/null \
   || die "frontend /health does not list ${EXPECTED_ENDPOINT}"
 
+<<<<<<< HEAD
 models_json="$(curl_json "${DYNAMO_FRONTEND_URL%/}/v1/models")" \
   || die "frontend models request failed: ${DYNAMO_FRONTEND_URL%/}/v1/models"
 echo "${models_json}" | jq -e --arg model "${DYNAMO_EXPECTED_MODEL}" \
