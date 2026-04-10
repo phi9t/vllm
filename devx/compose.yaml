@@ -71,9 +71,8 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+    entrypoint: []
     command:
-      - /bin/bash
-      - -lc
       - /workspace/${PROJECT_ID}/devx/run_hermetic_sshd.sh
     healthcheck:
       test:
