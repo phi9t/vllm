@@ -117,6 +117,24 @@ devx_tmux_auto_attach() {
     return 0
   fi
 
+  if [[ -n "${TMUX:-}" ]]; then
+    return 0
+  fi
+
+  case "${TERM:-}" in
+    tmux*|screen*)
+      return 0
+      ;;
+  esac
+
+  if ps -o comm= -p "$PPID" 2>/dev/null | grep -q '^tmux'; then
+    return 0
+  fi
+
+  if [[ "${DEVX_TMUX_AUTO_ATTACH_ACTIVE:-0}" = 1 ]]; then
+    return 0
+  fi
+
   if [[ "${TMUX_AUTO_ATTACH:-1}" = 0 ]]; then
     return 0
   fi
@@ -125,7 +143,7 @@ devx_tmux_auto_attach() {
     return 0
   fi
 
-  exec tmux new-session -A -s main
+  exec env DEVX_TMUX_AUTO_ATTACH_ACTIVE=1 tmux new-session -A -s main
 }
 
 devx_tmux_auto_attach
@@ -136,6 +154,7 @@ RUN cat <<'EOF' >/opt/devx/skel/.tmux/.tmux.conf
 set -g mouse on
 set -g history-limit 50000
 set -g escape-time 0
+set -g default-command "exec /bin/zsh"
 setw -g mode-keys vi
 EOF
 

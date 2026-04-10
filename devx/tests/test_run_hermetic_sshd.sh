@@ -51,6 +51,24 @@ devx_tmux_auto_attach() {
     return 0
   fi
 
+  if [[ -n "${TMUX:-}" ]]; then
+    return 0
+  fi
+
+  case "${TERM:-}" in
+    tmux*|screen*)
+      return 0
+      ;;
+  esac
+
+  if ps -o comm= -p "$PPID" 2>/dev/null | grep -q '^tmux'; then
+    return 0
+  fi
+
+  if [[ "${DEVX_TMUX_AUTO_ATTACH_ACTIVE:-0}" = 1 ]]; then
+    return 0
+  fi
+
   if [[ "${TMUX_AUTO_ATTACH:-1}" = 0 ]]; then
     return 0
   fi
@@ -59,7 +77,7 @@ devx_tmux_auto_attach() {
     return 0
   fi
 
-  exec tmux new-session -A -s main
+  exec env DEVX_TMUX_AUTO_ATTACH_ACTIVE=1 tmux new-session -A -s main
 }
 
 devx_tmux_auto_attach
@@ -75,6 +93,7 @@ EOF
 mkdir -p "${TEMPLATE_DIR}/.tmux"
 cat >"${TEMPLATE_DIR}/.tmux/.tmux.conf" <<'EOF'
 set -g mouse on
+set -g default-command "exec /bin/zsh"
 EOF
 
 ln -sfn .tmux/.tmux.conf "${TEMPLATE_DIR}/.tmux.conf"
@@ -333,6 +352,24 @@ fi' ] || {
     return 0
   fi
 
+  if [[ -n "${TMUX:-}" ]]; then
+    return 0
+  fi
+
+  case "${TERM:-}" in
+    tmux*|screen*)
+      return 0
+      ;;
+  esac
+
+  if ps -o comm= -p "$PPID" 2>/dev/null | grep -q '^tmux'; then
+    return 0
+  fi
+
+  if [[ "${DEVX_TMUX_AUTO_ATTACH_ACTIVE:-0}" = 1 ]]; then
+    return 0
+  fi
+
   if [[ "${TMUX_AUTO_ATTACH:-1}" = 0 ]]; then
     return 0
   fi
@@ -341,7 +378,7 @@ fi' ] || {
     return 0
   fi
 
-  exec tmux new-session -A -s main
+  exec env DEVX_TMUX_AUTO_ATTACH_ACTIVE=1 tmux new-session -A -s main
 }
 
 devx_tmux_auto_attach
@@ -356,7 +393,8 @@ grep -q "${LOGIN_HOME}/.zshenv" "${CHOWN_LOG}" || {
   exit 1
 }
 
-[ "$(cat "${LOGIN_HOME}/.tmux/.tmux.conf")" = 'set -g mouse on' ] || {
+[ "$(cat "${LOGIN_HOME}/.tmux/.tmux.conf")" = 'set -g mouse on
+set -g default-command "exec /bin/zsh"' ] || {
   echo "missing initial tmux seed" >&2
   exit 1
 }
@@ -455,7 +493,8 @@ bash "${REPO_ROOT}/devx/start_main.sh"
   exit 1
 }
 
-[ "$(cat "${LOGIN_HOME}/.tmux/.tmux.conf")" = 'set -g mouse on' ] || {
+[ "$(cat "${LOGIN_HOME}/.tmux/.tmux.conf")" = 'set -g mouse on
+set -g default-command "exec /bin/zsh"' ] || {
   echo "missing reseeded tmux file" >&2
   exit 1
 }
