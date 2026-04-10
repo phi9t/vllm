@@ -1,5 +1,6 @@
-# Use the same upstream CUDA family as the rest of the dev stack.
-ARG BASE_IMAGE="nvidia/cuda:13.0.2-cudnn-devel-ubuntu24.04"
+# Stay aligned with the upstream vLLM runtime image family used by the
+# deployment path instead of a generic CUDA base.
+ARG BASE_IMAGE="vllm/vllm-openai:latest"
 FROM ${BASE_IMAGE}
 
 ARG USERNAME=kvothe

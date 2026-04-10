@@ -341,4 +341,50 @@ grep -q 'does not match host uid' "${BAD_UID_STDERR}" || {
   exit 1
 }
 
+BAD_MISSING_HOST_IDS_STDERR="${TEST_ROOT}/bad-missing-host-ids.stderr"
+if HOST_UID= \
+  HOST_GID= \
+  CONFIG_FILE="${CONFIG_FILE}" \
+  AUTHORIZED_KEYS="${AUTHORIZED_KEYS}" \
+  HOME_TEMPLATE_DIR="${TEMPLATE_DIR}" \
+  RUNTIME_DIR="${RUNTIME_DIR}" \
+  STATE_DIR="${STATE_DIR}" \
+  HOSTKEY_DIR="${STATE_DIR}/hostkeys" \
+  LOGIN_USER=kvothe \
+  PORT=27722 \
+  SSHD_BIN="${FAKE_BIN}/sshd" \
+  bash "${REPO_ROOT}/devx/run_hermetic_sshd.sh" >"${TEST_ROOT}/bad-missing-host-ids.stdout" 2>"${BAD_MISSING_HOST_IDS_STDERR}"; then
+  echo "run_hermetic_sshd.sh unexpectedly accepted missing HOST_UID/HOST_GID" >&2
+  exit 1
+fi
+
+grep -q 'HOST_UID and HOST_GID are mandatory and must be provided' "${BAD_MISSING_HOST_IDS_STDERR}" || {
+  echo "missing host-id presence rejection" >&2
+  cat "${BAD_MISSING_HOST_IDS_STDERR}" >&2
+  exit 1
+}
+
+BAD_HOST_GID_STDERR="${TEST_ROOT}/bad-host-gid.stderr"
+if HOST_UID="${KVOTHE_UID}" \
+  HOST_GID=9999 \
+  CONFIG_FILE="${CONFIG_FILE}" \
+  AUTHORIZED_KEYS="${AUTHORIZED_KEYS}" \
+  HOME_TEMPLATE_DIR="${TEMPLATE_DIR}" \
+  RUNTIME_DIR="${RUNTIME_DIR}" \
+  STATE_DIR="${STATE_DIR}" \
+  HOSTKEY_DIR="${STATE_DIR}/hostkeys" \
+  LOGIN_USER=kvothe \
+  PORT=27722 \
+  SSHD_BIN="${FAKE_BIN}/sshd" \
+  bash "${REPO_ROOT}/devx/run_hermetic_sshd.sh" >"${TEST_ROOT}/bad-host-gid.stdout" 2>"${BAD_HOST_GID_STDERR}"; then
+  echo "run_hermetic_sshd.sh unexpectedly accepted mismatched HOST_GID" >&2
+  exit 1
+fi
+
+grep -q 'does not match host gid' "${BAD_HOST_GID_STDERR}" || {
+  echo "missing host-gid mismatch rejection" >&2
+  cat "${BAD_HOST_GID_STDERR}" >&2
+  exit 1
+}
+
 echo "PASS"

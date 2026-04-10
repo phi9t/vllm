@@ -1,0 +1,177 @@
+services:
+  devshell:
+    build:
+      context: ${REPO_ROOT}
+      dockerfile: devx/dev_container.dockerfile
+      args:
+        BASE_IMAGE: ${DEVX_BASE_IMAGE:-vllm/vllm-openai:latest}
+        USERNAME: kvothe
+        USER_UID: ${HOST_UID:?HOST_UID must be set}
+        USER_GID: ${HOST_GID:?HOST_GID must be set}
+    container_name: ${STACK_NAME}-devshell
+    restart: unless-stopped
+    network_mode: host
+    ipc: host
+    user: "0:0"
+    working_dir: /workspace/${PROJECT_ID}/${REPO_REL_PATH}
+    environment:
+      HOME: /root
+      LOGIN_USER: kvothe
+      CONTAINER_USER: ${CONTAINER_USER:-kvothe}
+      HOST_UID: ${HOST_UID:?HOST_UID must be set}
+      HOST_GID: ${HOST_GID:?HOST_GID must be set}
+      HOST_USER_NAME: ${HOST_USER_NAME:-}
+      PORT: ${SSH_PORT:-27722}
+      CONFIG_FILE: /run/devx/sshd_config
+      AUTHORIZED_KEYS: /run/devx/authorized_keys
+      HOST_SSH_DIR: /run/devx/host-ssh
+      HOME_TEMPLATE_DIR: /opt/devx/skel
+      RUNTIME_DIR: /run/devx
+      STATE_DIR: /var/lib/devx-sshd
+      HOSTKEY_DIR: /var/lib/devx-sshd/hostkeys
+      CUDA_HOME: /usr/local/cuda
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-all}
+      XDG_CONFIG_HOME: /home/kvothe/.config
+      XDG_DATA_HOME: /home/kvothe/.local/share
+      XDG_STATE_HOME: /home/kvothe/.local/state
+      XDG_CACHE_HOME: /home/kvothe/.cache
+      UV_CACHE_DIR: /root/.cache/uv
+      CARGO_HOME: /usr/local/cargo
+      RUSTUP_HOME: /usr/local/rustup
+      # Ensure TOS/Forge environment variables are passed through
+      FORGE_TOS_BUCKET: ${FORGE_TOS_BUCKET:-}
+      FORGE_TOS_KEY: ${FORGE_TOS_KEY:-}
+    volumes:
+      # Mount the kvothe-specific host home directory to persist user state.
+      - ${DEVX_HOST_HOME_DIR}/${CONTAINER_USER:-kvothe}:/home/kvothe
+      - ${DEVX_HOST_ROOT_HOME_DIR}:/root
+      - ${DEVX_HOST_TMP_DIR}:/tmp
+      - ${DEVX_HOST_VAR_TMP_DIR}:/var/tmp
+      - ${DEVX_HOST_WORKSPACE_DIR}:/workspace
+      - ${DEVX_HOST_OPT_TIGER_DIR}:/opt/tiger
+      - ${DEVX_HOST_RUN_DIR}:/run/devx
+      - ${DEVX_HOST_SSH_STATE_DIR}:/var/lib/devx-sshd
+      - ${DEVX_HOST_SSH_DIR_SOURCE}:/run/devx/host-ssh:ro
+      - ${DEVX_HOST_CONSUL_DATACENTER_SOURCE}:/opt/tmp/consul_agent/datacenter:ro
+      - ${DEVX_HOST_TIGER_YARN_DEPLOY_SOURCE}:/opt/tiger/yarn_deploy
+      - ${DEVX_HOST_BVC_SOURCE}:/usr/bin/bvc:ro
+      - ${DEVX_HOST_HADOOP_CONF_SOURCE}:/etc/hadoop/conf:ro
+      - ${DEVX_HOST_CACHE_UV_DIR}:/root/.cache/uv
+      - ${DEVX_HOST_CACHE_CARGO_DIR}:/root/.cargo
+      - ${DEVX_HOST_CACHE_RUSTUP_DIR}:/root/.rustup
+      - ${SSHD_CONFIG_PATH}:/run/devx/sshd_config:ro
+      - ${AUTHORIZED_KEYS_PATH}:/run/devx/authorized_keys:ro
+      - ${REPO_ROOT}:/workspace/${PROJECT_ID}
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    command:
+      - /bin/bash
+      - -lc
+      - /workspace/${PROJECT_ID}/devx/run_hermetic_sshd.sh
+    healthcheck:
+      test:
+        ["CMD-SHELL", "pgrep -x sshd >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  sglang:
+    image: ${SGLANG_WORKER_IMAGE:-lmsysorg/sglang:latest}
+    container_name: ${STACK_NAME}-sglang
+    restart: unless-stopped
+    network_mode: host
+    ipc: host
+    user: "0:0"
+    environment:
+      HOST_UID: ${HOST_UID:?HOST_UID must be set}
+      HOST_GID: ${HOST_GID:?HOST_GID must be set}
+      HF_TOKEN: ${HF_TOKEN:-}
+      HOME: /tmp
+      HF_HOME: /tmp/.cache/huggingface
+      HUGGINGFACE_HUB_CACHE: /tmp/.cache/huggingface/hub
+      HF_DATASETS_CACHE: /tmp/.cache/huggingface/datasets
+      FLASHINFER_WORKSPACE_DIR: /tmp/.cache/flashinfer
+      TRANSFORMERS_CACHE: /tmp/.cache/transformers
+      TVM_FFI_CACHE_DIR: /tmp/.cache/tvm-ffi
+      MODELSCOPE_CACHE: /tmp/.cache/modelscope
+      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      SGLANG_USE_MODELSCOPE: ${SGLANG_USE_MODELSCOPE:-false}
+    entrypoint:
+      - /bin/sh
+      - -lc
+    command:
+      - >-
+        set -eu;
+        if ! getent group "${HOST_GID:?HOST_GID must be set}" >/dev/null 2>&1; then
+          echo "devxhost:x:${HOST_GID:?HOST_GID must be set}:" >> /etc/group;
+        fi;
+        if ! getent passwd "${HOST_UID:?HOST_UID must be set}" >/dev/null 2>&1; then
+          echo "devxhost:x:${HOST_UID:?HOST_UID must be set}:${HOST_GID:?HOST_GID must be set}:devx host user:/tmp:/bin/sh" >> /etc/passwd;
+        fi;
+        exec setpriv --reuid "${HOST_UID:?HOST_UID must be set}" --regid "${HOST_GID:?HOST_GID must be set}" --clear-groups python3 -m sglang.launch_server --model-path "${SGLANG_MODEL_PATH:-Qwen/Qwen3.5-35B-A3B}" --host 0.0.0.0 --port "${SGLANG_PORT:-30001}" --mem-fraction-static "${SGLANG_MEM_FRACTION_STATIC:-0.9}" --tp-size "${SGLANG_TP_SIZE:-1}"
+    volumes:
+      - ${DEVX_HOST_CACHE_HF_DIR}:/tmp/.cache/huggingface
+      - ${DEVX_HOST_CACHE_FLASHINFER_DIR}:/tmp/.cache/flashinfer
+      - ${DEVX_HOST_CACHE_TRANSFORMERS_DIR}:/tmp/.cache/transformers
+      - ${DEVX_HOST_CACHE_TVM_FFI_DIR}:/tmp/.cache/tvm-ffi
+      - ${DEVX_HOST_CACHE_MODELSCOPE_DIR}:/tmp/.cache/modelscope
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    healthcheck:
+      test:
+        ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:${SGLANG_PORT:-30001}/health')\" >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${SGLANG_GPU_DEVICE_ID:-0}"]
+              capabilities: [gpu]
+
+  ollama:
+    image: ${OLLAMA_IMAGE:-ollama/ollama}
+    container_name: ${STACK_NAME}-ollama
+    restart: unless-stopped
+    network_mode: host
+    user: "0:0"
+    environment:
+      HOST_UID: ${HOST_UID:?HOST_UID must be set}
+      HOST_GID: ${HOST_GID:?HOST_GID must be set}
+      HOME: /tmp
+      OLLAMA_HOST: 0.0.0.0:${OLLAMA_PORT:-11434}
+      OLLAMA_MODELS: /tmp/.ollama/models
+    entrypoint:
+      - /bin/sh
+      - -lc
+    command:
+      - >-
+        set -eu;
+        if ! getent group "${HOST_GID:?HOST_GID must be set}" >/dev/null 2>&1; then
+          echo "devxhost:x:${HOST_GID:?HOST_GID must be set}:" >> /etc/group;
+        fi;
+        if ! getent passwd "${HOST_UID:?HOST_UID must be set}" >/dev/null 2>&1; then
+          echo "devxhost:x:${HOST_UID:?HOST_UID must be set}:${HOST_GID:?HOST_GID must be set}:devx host user:/tmp:/bin/sh" >> /etc/passwd;
+        fi;
+        exec setpriv --reuid "${HOST_UID:?HOST_UID must be set}" --regid "${HOST_GID:?HOST_GID must be set}" --clear-groups ollama serve
+    volumes:
+      - ${DEVX_HOST_OLLAMA_DIR}:/tmp/.ollama
+    healthcheck:
+      test:
+        ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
