@@ -1,0 +1,41 @@
+ListenAddress 0.0.0.0
+Port 27722
+
+# Accept all environment variables from the client/container environment
+AcceptEnv *
+# Provide a sane UTF-8 default when client sends nothing
+SetEnv LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+
+# Reduce handshake delays for interactive sessions
+UseDNS no
+GSSAPIAuthentication no
+UsePAM no
+
+PermitRootLogin no
+PasswordAuthentication no
+PermitEmptyPasswords no
+
+ChallengeResponseAuthentication no
+PubkeyAuthentication yes
+KbdInteractiveAuthentication no
+AuthorizedKeysFile /run/devx/authorized_keys
+HostbasedAuthentication no
+AuthenticationMethods publickey
+AllowUsers kvothe
+
+PermitUserEnvironment no
+X11Forwarding no
+AllowTcpForwarding yes
+GatewayPorts no
+Subsystem sftp internal-sftp
+
+# Improve stability under bursts and multiplexing
+MaxStartups 10:30:100
+MaxSessions 100
+
+PermitTTY yes
+PidFile /run/devx/sshd.pid
+
+ClientAliveInterval 30
+ClientAliveCountMax 6
+TCPKeepAlive yes
