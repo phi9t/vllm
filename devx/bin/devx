@@ -133,36 +133,39 @@ resolve_query_preset() {
 
 build_chat_completion_request_json() {
   local model_id="$1"
-  local prompt="$2"
+  local prompt_file="$2"
 
-  DEVX_QUERY_MODEL="${model_id}" \
-    DEVX_QUERY_PROMPT="${prompt}" \
-    python3 - <<'PY'
+  python3 - "${model_id}" "${prompt_file}" <<'PY'
 import json
-import os
+import sys
+
+with open(sys.argv[2], "r", encoding="utf-8") as fh:
+    prompt = fh.read()
 
 payload = {
-    "model": os.environ["DEVX_QUERY_MODEL"],
-    "messages": [{"role": "user", "content": os.environ["DEVX_QUERY_PROMPT"]}],
+    "model": sys.argv[1],
+    "messages": [{"role": "user", "content": prompt}],
 }
 print(json.dumps(payload, separators=(",", ":")))
 PY
 }
 
 format_query_response_json() {
-  local model_id="$1"
+  local requested_model_id="$1"
   local latency_ms="$2"
-  local response_json="$3"
+  local response_file="$3"
 
-  DEVX_QUERY_MODEL="${model_id}" \
-  DEVX_QUERY_LATENCY_MS="${latency_ms}" \
-  DEVX_QUERY_RESPONSE_JSON="${response_json}" \
-  python3 - <<'PY'
+  python3 - "${requested_model_id}" "${latency_ms}" "${response_file}" <<'PY'
 import json
-import os
+import sys
 
-response = json.loads(os.environ["DEVX_QUERY_RESPONSE_JSON"])
+requested_model = sys.argv[1]
+latency_ms = int(sys.argv[2])
+response_file = sys.argv[3]
 reply = ""
+
+with open(response_file, "r", encoding="utf-8") as fh:
+    response = json.load(fh)
 
 choices = response.get("choices") or []
 if choices:
@@ -176,8 +179,8 @@ if not reply:
     raise SystemExit("query: launcher response did not include a reply")
 
 payload = {
-    "model": os.environ["DEVX_QUERY_MODEL"],
-    "latency_ms": int(os.environ["DEVX_QUERY_LATENCY_MS"]),
+    "model": response.get("model") or requested_model,
+    "latency_ms": latency_ms,
     "reply": reply,
 }
 print(json.dumps(payload, separators=(",", ":")))
@@ -226,30 +229,39 @@ query() {
   require_command python3
 
   local model_id
-  local request_json
-  local response_json
+  local prompt_file
+  local request_file
+  local response_file
   local normalized_json
   local latency_ms
   local start_ns
   local end_ns
+  local temp_dir
 
   model_id="$(preset_model_id "${preset_name}")"
-  request_json="$(build_chat_completion_request_json "${model_id}" "${prompt}")"
+  temp_dir="$(mktemp -d)"
+  prompt_file="${temp_dir}/prompt.txt"
+  request_file="${temp_dir}/request.json"
+  response_file="${temp_dir}/response.json"
+
+  printf '%s' "${prompt}" >"${prompt_file}"
+  build_chat_completion_request_json "${model_id}" "${prompt_file}" >"${request_file}"
   start_ns="$(date +%s%N)"
-  response_json="$(
-    DEVX_QUERY_PAYLOAD="${request_json}" \
-    VLLM_MODEL="${model_id}" \
-    DYNAMO_MODEL="${model_id}" \
+  if ! VLLM_MODEL="${model_id}" DYNAMO_MODEL="${model_id}" \
     run_launch_container exec -T dynamo-frontend \
-      env VLLM_MODEL="${model_id}" \
-      DYNAMO_MODEL="${model_id}" \
-      DEVX_QUERY_PAYLOAD="${request_json}" \
-      bash -lc 'curl --silent --show-error --fail -H "Content-Type: application/json" -d "$DEVX_QUERY_PAYLOAD" http://127.0.0.1:8000/v1/chat/completions'
-  )"
+    bash -lc 'curl --silent --show-error --fail -H "Content-Type: application/json" --data-binary @- http://127.0.0.1:8000/v1/chat/completions' \
+    <"${request_file}" >"${response_file}"; then
+    rm -rf "${temp_dir}"
+    return 1
+  fi
   end_ns="$(date +%s%N)"
   latency_ms=$(( (end_ns - start_ns) / 1000000 ))
 
-  normalized_json="$(format_query_response_json "${model_id}" "${latency_ms}" "${response_json}")"
+  if ! normalized_json="$(format_query_response_json "${model_id}" "${latency_ms}" "${response_file}")"; then
+    rm -rf "${temp_dir}"
+    return 1
+  fi
+  rm -rf "${temp_dir}"
   printf '%s\n' "${normalized_json}"
 }
 
