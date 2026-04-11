@@ -178,10 +178,12 @@ else:
 if not reply:
     raise SystemExit("query: launcher response did not include a reply")
 
+reply_excerpt = reply[:160]
+
 payload = {
     "model": response.get("model") or requested_model,
     "latency_ms": latency_ms,
-    "reply": reply,
+    "reply": reply_excerpt,
 }
 print(json.dumps(payload, separators=(",", ":")))
 PY
