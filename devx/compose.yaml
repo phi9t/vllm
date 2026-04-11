@@ -21,7 +21,7 @@ services:
       HOST_UID: ${HOST_UID:?HOST_UID must be set}
       HOST_GID: ${HOST_GID:?HOST_GID must be set}
       HOST_USER_NAME: ${HOST_USER_NAME:-}
-      PORT: ${SSH_PORT:-27722}
+      PORT: ${SSH_PORT:-2222}
       CONFIG_FILE: /run/devx/sshd_config
       AUTHORIZED_KEYS: /run/devx/authorized_keys
       HOST_SSH_DIR: /run/devx/host-ssh
@@ -65,7 +65,7 @@ services:
       - ${REPO_ROOT}:/workspace/${PROJECT_ID}
       - /sys/fs/cgroup:/sys/fs/cgroup:ro
     ports:
-      - 127.0.0.1:${SSH_PORT:-27722}:${SSH_PORT:-27722}
+      - 127.0.0.1:${SSH_PORT:-2222}:${SSH_PORT:-2222}
     networks:
       - devx-internal
     deploy:

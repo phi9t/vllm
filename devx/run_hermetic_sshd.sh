@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-PORT="${PORT:-27722}"
+PORT="${PORT:-2222}"
 LOGIN_USER="${LOGIN_USER:-kvothe}"
 HOST_UID="${HOST_UID:-}"
 HOST_GID="${HOST_GID:-}"

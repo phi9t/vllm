@@ -333,7 +333,7 @@ RUNTIME_DIR="${RUNTIME_DIR}" \
 STATE_DIR="${STATE_DIR}" \
 HOSTKEY_DIR="${STATE_DIR}/hostkeys" \
 LOGIN_USER=kvothe \
-PORT=27722 \
+PORT=2222 \
 SSHD_BIN="${FAKE_BIN}/sshd" \
 bash "${REPO_ROOT}/devx/start_main.sh"
 
@@ -503,7 +503,7 @@ RUNTIME_DIR="${RUNTIME_DIR}" \
 STATE_DIR="${STATE_DIR}" \
 HOSTKEY_DIR="${STATE_DIR}/hostkeys" \
 LOGIN_USER=kvothe \
-PORT=27722 \
+PORT=2222 \
 SSHD_BIN="${FAKE_BIN}/sshd" \
 bash "${REPO_ROOT}/devx/start_main.sh"
 
@@ -550,7 +550,7 @@ RUNTIME_DIR="${PREEXISTING_RUNTIME_DIR}" \
 STATE_DIR="${PREEXISTING_STATE_DIR}" \
 HOSTKEY_DIR="${PREEXISTING_STATE_DIR}/hostkeys" \
 LOGIN_USER=kvothe \
-PORT=27722 \
+PORT=2222 \
 SSHD_BIN="${FAKE_BIN}/sshd" \
 bash "${REPO_ROOT}/devx/run_hermetic_sshd.sh"
 
@@ -599,7 +599,7 @@ if HOST_UID="${KVOTHE_UID}" \
   STATE_DIR="${STATE_DIR}" \
   HOSTKEY_DIR="${STATE_DIR}/hostkeys" \
   LOGIN_USER=alice \
-  PORT=27722 \
+  PORT=2222 \
   SSHD_BIN="${FAKE_BIN}/sshd" \
   bash "${REPO_ROOT}/devx/run_hermetic_sshd.sh" >"${TEST_ROOT}/bad-login.stdout" 2>"${BAD_STDERR}"; then
   echo "run_hermetic_sshd.sh unexpectedly accepted LOGIN_USER=alice" >&2
@@ -622,7 +622,7 @@ if HOST_UID=9999 \
   STATE_DIR="${STATE_DIR}" \
   HOSTKEY_DIR="${STATE_DIR}/hostkeys" \
   LOGIN_USER=kvothe \
-  PORT=27722 \
+  PORT=2222 \
   SSHD_BIN="${FAKE_BIN}/sshd" \
   bash "${REPO_ROOT}/devx/run_hermetic_sshd.sh" >"${TEST_ROOT}/bad-uid.stdout" 2>"${BAD_UID_STDERR}"; then
   echo "run_hermetic_sshd.sh unexpectedly accepted mismatched HOST_UID" >&2
@@ -645,7 +645,7 @@ if HOST_UID= \
   STATE_DIR="${STATE_DIR}" \
   HOSTKEY_DIR="${STATE_DIR}/hostkeys" \
   LOGIN_USER=kvothe \
-  PORT=27722 \
+  PORT=2222 \
   SSHD_BIN="${FAKE_BIN}/sshd" \
   bash "${REPO_ROOT}/devx/run_hermetic_sshd.sh" >"${TEST_ROOT}/bad-missing-host-ids.stdout" 2>"${BAD_MISSING_HOST_IDS_STDERR}"; then
   echo "run_hermetic_sshd.sh unexpectedly accepted missing HOST_UID/HOST_GID" >&2
@@ -668,7 +668,7 @@ if HOST_UID="${KVOTHE_UID}" \
   STATE_DIR="${STATE_DIR}" \
   HOSTKEY_DIR="${STATE_DIR}/hostkeys" \
   LOGIN_USER=kvothe \
-  PORT=27722 \
+  PORT=2222 \
   SSHD_BIN="${FAKE_BIN}/sshd" \
   bash "${REPO_ROOT}/devx/run_hermetic_sshd.sh" >"${TEST_ROOT}/bad-host-gid.stdout" 2>"${BAD_HOST_GID_STDERR}"; then
   echo "run_hermetic_sshd.sh unexpectedly accepted mismatched HOST_GID" >&2
@@ -692,7 +692,7 @@ if HOST_UID="${KVOTHE_UID}" \
   STATE_DIR="${STATE_DIR}" \
   HOSTKEY_DIR="${BAD_HOSTKEY_DIR}" \
   LOGIN_USER=kvothe \
-  PORT=27722 \
+  PORT=2222 \
   SSHD_BIN="${FAKE_BIN}/sshd" \
   bash "${REPO_ROOT}/devx/run_hermetic_sshd.sh" >"${TEST_ROOT}/bad-hostkey-dir.stdout" 2>"${BAD_HOSTKEY_STDERR}"; then
   echo "run_hermetic_sshd.sh unexpectedly accepted HOSTKEY_DIR outside STATE_DIR" >&2
@@ -724,7 +724,7 @@ if HOST_UID="${KVOTHE_UID}" \
   HOSTKEY_DIR="${STATE_DIR}/hostkeys" \
   HOSTKEY_ED25519="${BAD_HOSTKEY_ED25519}" \
   LOGIN_USER=kvothe \
-  PORT=27722 \
+  PORT=2222 \
   SSHD_BIN="${FAKE_BIN}/sshd" \
   bash "${REPO_ROOT}/devx/run_hermetic_sshd.sh" >"${TEST_ROOT}/bad-hostkey-ed25519.stdout" 2>"${BAD_HOSTKEY_ED25519_STDERR}"; then
   echo "run_hermetic_sshd.sh unexpectedly accepted HOSTKEY_ED25519 outside HOSTKEY_DIR" >&2
@@ -762,7 +762,7 @@ if HOST_UID="${KVOTHE_UID}" \
   HOSTKEY_DIR="${STATE_DIR}/hostkeys" \
   HOSTKEY_RSA="${BAD_HOSTKEY_RSA}" \
   LOGIN_USER=kvothe \
-  PORT=27722 \
+  PORT=2222 \
   SSHD_BIN="${FAKE_BIN}/sshd" \
   bash "${REPO_ROOT}/devx/run_hermetic_sshd.sh" >"${TEST_ROOT}/bad-hostkey-rsa.stdout" 2>"${BAD_HOSTKEY_RSA_STDERR}"; then
   echo "run_hermetic_sshd.sh unexpectedly accepted HOSTKEY_RSA outside HOSTKEY_DIR" >&2

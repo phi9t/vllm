@@ -1,5 +1,5 @@
 ListenAddress 0.0.0.0
-Port 27722
+Port 2222
 
 # Accept all environment variables from the client/container environment
 AcceptEnv *

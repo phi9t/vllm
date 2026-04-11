@@ -102,11 +102,16 @@ export_naming_context() {
   local script_dir="$1"
 
   DEVX_BASE_IMAGE="${DEVX_BASE_IMAGE:-vllm/vllm-openai:latest}"
-  SSH_PORT="${SSH_PORT:-27722}"
+  SSH_PORT="${SSH_PORT:-2222}"
   SGLANG_PORT="${SGLANG_PORT:-30001}"
   OLLAMA_PORT="${OLLAMA_PORT:-11434}"
 
-  AUTHORIZED_KEYS_SOURCE="${AUTHORIZED_KEYS_SOURCE:-${script_dir}/authorized_keys.placeholder}"
+  local local_authorized_keys="${script_dir}/authorized_keys"
+  if [[ -f "${local_authorized_keys}" ]]; then
+    AUTHORIZED_KEYS_SOURCE="${AUTHORIZED_KEYS_SOURCE:-${local_authorized_keys}}"
+  else
+    AUTHORIZED_KEYS_SOURCE="${AUTHORIZED_KEYS_SOURCE:-${script_dir}/authorized_keys.placeholder}"
+  fi
   SSHD_CONFIG_SOURCE="${SSHD_CONFIG_SOURCE:-${script_dir}/sshd_config}"
 
   if [[ "${CONTAINER_USER:-}" != "kvothe" ]]; then
