@@ -75,6 +75,16 @@ mkdir -p \
   "${TEST_ROOT}/bin" \
   "${TEST_ROOT}/home/.devx/special-circ-phi9t-vllm/secrets"
 
+if ! DEVX_DUMP_LAUNCH_CONTAINER_SH=1 \
+  bash "${REPO_ROOT}/devx/bin/devx" \
+  >"${TEST_ROOT}/launch-path.stdout" \
+  2>"${TEST_ROOT}/launch-path.stderr"; then
+  echo "devx should print the default launch_container.sh path in dump mode" >&2
+  cat "${TEST_ROOT}/launch-path.stderr" >&2
+  exit 1
+fi
+assert_contains "${TEST_ROOT}/launch-path.stdout" "${REPO_ROOT}/devx/launch_container.sh"
+
 cat <<'EOF_DOCKER' > "${TEST_ROOT}/bin/docker"
 #!/bin/bash
 set -euo pipefail
