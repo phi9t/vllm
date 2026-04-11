@@ -26,6 +26,8 @@ assert_contains() {
 mkdir -p "${TEST_ROOT}/bin" \
   "${TEST_ROOT}/home/.devx/special-circ-phi9t-vllm/secrets"
 
+touch "${TEST_ROOT}/curl.log"
+
 cat <<'EOF_DOCKER' > "${TEST_ROOT}/bin/docker"
 #!/bin/bash
 set -euo pipefail
@@ -54,9 +56,28 @@ cat <<'EOF_CURL' > "${TEST_ROOT}/bin/curl"
 #!/bin/bash
 set -euo pipefail
 
-url="${@: -1}"
+echo "$*" >> "__CURL_LOG__"
+
+auth_header=""
+args=("$@")
+for ((i = 0; i < $#; i++)); do
+  if [[ "${args[i]}" == "-H" ]]; then
+    next_index=$((i + 1))
+    auth_header="${args[next_index]:-}"
+  fi
+done
+
+if [[ "${auth_header}" != "Authorization: Bearer hf_test_token" ]]; then
+  echo "unexpected authorization header: ${auth_header}" >&2
+  exit 1
+fi
+
+url="${args[$(( $# - 1 ))]}"
 case "${url}" in
   *"https://huggingface.co/api/models/Qwen/Qwen3-0.6B"*)
+    exit 0
+    ;;
+  *"https://huggingface.co/api/models/Qwen/Qwen3-4B"*)
     exit 0
     ;;
   *)
@@ -65,20 +86,91 @@ case "${url}" in
     ;;
 esac
 EOF_CURL
+sed -i "s|__CURL_LOG__|${TEST_ROOT}/curl.log|g" "${TEST_ROOT}/bin/curl"
 chmod +x "${TEST_ROOT}/bin/curl"
 
-printf 'hf_test_token\n' > "${TEST_ROOT}/home/.devx/special-circ-phi9t-vllm/secrets/huggingface_token"
+run_doctor() {
+  local home_dir="$1"
+  shift
 
-if ! PATH="${TEST_ROOT}/bin:${PATH}" \
-  HOME="${TEST_ROOT}/home" \
-  bash "${REPO_ROOT}/devx/bin/devx" doctor --preset qwen3-0.6b \
-  >"${TEST_ROOT}/stdout" \
-  2>"${TEST_ROOT}/stderr"; then
-  echo "doctor should pass once preflight is implemented" >&2
-  cat "${TEST_ROOT}/stderr" >&2
+  PATH="${TEST_ROOT}/bin:${PATH}" \
+    HOME="${home_dir}" \
+    bash "${REPO_ROOT}/devx/bin/devx" doctor "$@"
+}
+
+assert_file_empty() {
+  local path="$1"
+
+  if [[ -s "${path}" ]]; then
+    echo "expected empty file: ${path}" >&2
+    cat "${path}" >&2
+    exit 1
+  fi
+}
+
+reset_curl_log() {
+  : > "${TEST_ROOT}/curl.log"
+}
+
+token_dir="${TEST_ROOT}/home/.devx/special-circ-phi9t-vllm/secrets"
+
+reset_curl_log
+if run_doctor "${TEST_ROOT}/home" \
+  >"${TEST_ROOT}/missing.stdout" \
+  2>"${TEST_ROOT}/missing.stderr"; then
+  echo "doctor should fail when the token file is missing" >&2
   exit 1
 fi
+assert_contains "${TEST_ROOT}/missing.stderr" "missing or empty token file"
+assert_file_empty "${TEST_ROOT}/curl.log"
 
-assert_contains "${TEST_ROOT}/stdout" "PREFLIGHT PASS: model=Qwen/Qwen3-0.6B"
+printf '   \n\t\n' > "${token_dir}/huggingface_token"
+
+reset_curl_log
+if run_doctor "${TEST_ROOT}/home" \
+  >"${TEST_ROOT}/whitespace.stdout" \
+  2>"${TEST_ROOT}/whitespace.stderr"; then
+  echo "doctor should fail when the token file is whitespace-only" >&2
+  exit 1
+fi
+assert_contains "${TEST_ROOT}/whitespace.stderr" "missing or empty token file"
+assert_file_empty "${TEST_ROOT}/curl.log"
+
+printf 'hf_test_token\n' > "${token_dir}/huggingface_token"
+
+reset_curl_log
+if ! run_doctor "${TEST_ROOT}/home" \
+  >"${TEST_ROOT}/default.stdout" \
+  2>"${TEST_ROOT}/default.stderr"; then
+  echo "doctor should pass with the default preset" >&2
+  cat "${TEST_ROOT}/default.stderr" >&2
+  exit 1
+fi
+assert_contains "${TEST_ROOT}/default.stdout" "PREFLIGHT PASS: model=Qwen/Qwen3-0.6B"
+assert_contains "${TEST_ROOT}/curl.log" "Authorization: Bearer hf_test_token"
+assert_contains "${TEST_ROOT}/curl.log" "https://huggingface.co/api/models/Qwen/Qwen3-0.6B"
+
+printf 'hf_test_token\n' > "${token_dir}/huggingface_token"
+
+reset_curl_log
+if ! run_doctor "${TEST_ROOT}/home" --preset qwen3-0.6b \
+  >"${TEST_ROOT}/explicit.stdout" \
+  2>"${TEST_ROOT}/explicit.stderr"; then
+  echo "doctor should pass with an explicit preset" >&2
+  cat "${TEST_ROOT}/explicit.stderr" >&2
+  exit 1
+fi
+assert_contains "${TEST_ROOT}/explicit.stdout" "PREFLIGHT PASS: model=Qwen/Qwen3-0.6B"
+assert_contains "${TEST_ROOT}/curl.log" "Authorization: Bearer hf_test_token"
+
+reset_curl_log
+if run_doctor "${TEST_ROOT}/home" --preset does-not-exist \
+  >"${TEST_ROOT}/invalid.stdout" \
+  2>"${TEST_ROOT}/invalid.stderr"; then
+  echo "doctor should fail for an invalid preset" >&2
+  exit 1
+fi
+assert_contains "${TEST_ROOT}/invalid.stderr" "invalid preset: does-not-exist"
+assert_file_empty "${TEST_ROOT}/curl.log"
 
 echo "PASS"
