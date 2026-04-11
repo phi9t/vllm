@@ -37,6 +37,55 @@ assert_not_contains() {
 
 PRESET_SCRIPT="${REPO_ROOT}/devx/lib/presets.sh"
 
+mkdir -p "${TEST_ROOT}/bin" "${TEST_ROOT}/home/.devx/special-circ-phi9t-vllm/secrets"
+
+cat <<'EOF_DOCKER' > "${TEST_ROOT}/bin/docker"
+#!/bin/bash
+set -euo pipefail
+
+case "${1:-}" in
+  version)
+    exit 0
+    ;;
+  compose)
+    if [[ "${2:-}" == "version" ]]; then
+      exit 0
+    fi
+    exit 1
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+EOF_DOCKER
+chmod +x "${TEST_ROOT}/bin/docker"
+
+cat <<'EOF_CURL' > "${TEST_ROOT}/bin/curl"
+#!/bin/bash
+set -euo pipefail
+
+case "${*: -1}" in
+  *"https://huggingface.co/api/models/Qwen/Qwen3-0.6B"*)
+    exit 0
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+EOF_CURL
+chmod +x "${TEST_ROOT}/bin/curl"
+
+printf 'hf_test_token\n' > "${TEST_ROOT}/home/.devx/special-circ-phi9t-vllm/secrets/huggingface_token"
+
+if ! PATH="${TEST_ROOT}/bin:${PATH}" HOME="${TEST_ROOT}/home" \
+  bash "${REPO_ROOT}/devx/bin/devx" doctor --preset qwen3-0.6b \
+  >"${TEST_ROOT}/doctor.out" 2>"${TEST_ROOT}/doctor.err"; then
+  echo "doctor should succeed for a known preset" >&2
+  cat "${TEST_ROOT}/doctor.err" >&2
+  exit 1
+fi
+assert_contains "${TEST_ROOT}/doctor.out" "PREFLIGHT PASS: model=Qwen/Qwen3-0.6B"
+
 if bash "${REPO_ROOT}/devx/bin/devx" help >"${TEST_ROOT}/help.out" 2>"${TEST_ROOT}/help.err"; then
   assert_contains "${TEST_ROOT}/help.out" "Usage: devx"
 else
@@ -56,7 +105,7 @@ if [[ "${unknown_exit_code}" -ne 1 ]]; then
 fi
 assert_contains "${TEST_ROOT}/unknown.err" "unknown subcommand"
 
-for cmd in doctor up query switch experiment; do
+for cmd in up query switch experiment; do
   stdout_file="${TEST_ROOT}/${cmd}.out"
   stderr_file="${TEST_ROOT}/${cmd}.err"
   if bash "${REPO_ROOT}/devx/bin/devx" "${cmd}" >"${stdout_file}" 2>"${stderr_file}"; then

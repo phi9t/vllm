@@ -3,6 +3,11 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/../lib/presets.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/../lib/preflight.sh"
+
 usage() {
   cat <<'EOF'
 Usage: devx <subcommand> [args]
@@ -17,6 +22,37 @@ Subcommands:
 EOF
 }
 
+doctor() {
+  local preset_name=""
+
+  while [[ $# -gt 0 ]]; do
+    case "${1:-}" in
+      --preset)
+        if [[ $# -lt 2 ]]; then
+          echo "doctor: missing value for --preset" >&2
+          return 1
+        fi
+        preset_name="${2}"
+        shift 2
+        ;;
+      *)
+        echo "doctor: unknown argument: ${1}" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if [[ -z "${preset_name}" ]]; then
+    echo "doctor: --preset is required" >&2
+    return 1
+  fi
+
+  require_preset "${preset_name}"
+  local model_id
+  model_id="$(preset_model_id "${preset_name}")"
+  run_preflight "${model_id}"
+}
+
 cmd="${1:-help}"
 shift || true
 
@@ -24,7 +60,10 @@ case "${cmd}" in
   help)
     usage
     ;;
-  doctor|up|query|switch|experiment)
+  doctor)
+    doctor "$@"
+    ;;
+  up|query|switch|experiment)
     echo "not yet implemented: ${cmd}" >&2
     exit 2
     ;;
