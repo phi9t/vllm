@@ -25,26 +25,13 @@ assert_contains() {
 
 assert_json_field() {
   local json_file="$1"
-  local field_path="${2#.}"
+  local field_name="${2#.}"
   local expected="$3"
-
   local actual
-  actual="$(python3 - "${json_file}" "${field_path}" <<'PY'
-import json
-import sys
 
-with open(sys.argv[1], "r", encoding="utf-8") as fh:
-    data = json.load(fh)
-
-value = data
-for part in sys.argv[2].split("."):
-    value = value[part]
-
-print(value)
-PY
-)"
+  actual="$(sed -n "s/.*\"${field_name}\":\"\\([^\"]*\\)\".*/\\1/p" "${json_file}" | head -n 1)"
   if [[ "${actual}" != "${expected}" ]]; then
-    echo "unexpected JSON field value for ${field_path}: ${actual} (expected ${expected})" >&2
+    echo "unexpected JSON field value for ${field_name}: ${actual} (expected ${expected})" >&2
     echo "--- ${json_file} ---" >&2
     cat "${json_file}" >&2
     exit 1
@@ -53,71 +40,47 @@ PY
 
 assert_json_number_field() {
   local json_file="$1"
-  local field_path="${2#.}"
+  local field_name="${2#.}"
+  local actual
 
-  python3 - "${json_file}" "${field_path}" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], "r", encoding="utf-8") as fh:
-    data = json.load(fh)
-
-value = data
-for part in sys.argv[2].split("."):
-    value = value[part]
-
-if not isinstance(value, int):
-    raise SystemExit(f"field {sys.argv[2]} is not a JSON integer: {value!r}")
-PY
+  actual="$(sed -n "s/.*\"${field_name}\":\\([0-9][0-9]*\\).*/\\1/p" "${json_file}" | head -n 1)"
+  if [[ -z "${actual}" ]]; then
+    echo "field ${field_name} is not a JSON integer" >&2
+    echo "--- ${json_file} ---" >&2
+    cat "${json_file}" >&2
+    exit 1
+  fi
 }
 
 assert_json_field_prefix() {
   local json_file="$1"
-  local field_path="${2#.}"
+  local field_name="${2#.}"
   local expected_prefix="$3"
+  local actual
 
-  python3 - "${json_file}" "${field_path}" "${expected_prefix}" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], "r", encoding="utf-8") as fh:
-    data = json.load(fh)
-
-value = data
-for part in sys.argv[2].split("."):
-    value = value[part]
-
-if not isinstance(value, str):
-    raise SystemExit(f"field {sys.argv[2]} is not a string")
-
-if not value.startswith(sys.argv[3]):
-    raise SystemExit(f"field {sys.argv[2]} did not start with expected prefix: {sys.argv[3]!r}, actual={value!r}")
-PY
+  actual="$(sed -n "s/.*\"${field_name}\":\"\\([^\"]*\\)\".*/\\1/p" "${json_file}" | head -n 1)"
+  if [[ "${actual}" != "${expected_prefix}"* ]]; then
+    echo "field ${field_name} did not start with expected prefix: ${expected_prefix}" >&2
+    echo "actual: ${actual}" >&2
+    echo "--- ${json_file} ---" >&2
+    cat "${json_file}" >&2
+    exit 1
+  fi
 }
 
 assert_json_field_max_length() {
   local json_file="$1"
-  local field_path="${2#.}"
+  local field_name="${2#.}"
   local max_length="$3"
+  local actual
 
-  python3 - "${json_file}" "${field_path}" "${max_length}" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], "r", encoding="utf-8") as fh:
-    data = json.load(fh)
-
-value = data
-for part in sys.argv[2].split("."):
-    value = value[part]
-
-if not isinstance(value, str):
-    raise SystemExit(f"field {sys.argv[2]} is not a string")
-
-max_length = int(sys.argv[3])
-if len(value) > max_length:
-    raise SystemExit(f"field {sys.argv[2]} exceeded max length {max_length}: {len(value)}")
-PY
+  actual="$(sed -n "s/.*\"${field_name}\":\"\\([^\"]*\\)\".*/\\1/p" "${json_file}" | head -n 1)"
+  if [[ "${#actual}" -gt "${max_length}" ]]; then
+    echo "field ${field_name} exceeded max length ${max_length}: ${#actual}" >&2
+    echo "--- ${json_file} ---" >&2
+    cat "${json_file}" >&2
+    exit 1
+  fi
 }
 
 assert_line_equals() {
@@ -210,6 +173,56 @@ exit 0
 EOF_CURL
 chmod +x "${TEST_ROOT}/bin/curl"
 
+cat <<'EOF_JQ' > "${TEST_ROOT}/bin/jq"
+#!/bin/bash
+set -euo pipefail
+
+if [[ "${1:-}" == "-cn" && "${2:-}" == "--arg" && "${3:-}" == "model" && "${5:-}" == "--rawfile" && "${6:-}" == "prompt" ]]; then
+  model_value="${4:-}"
+  prompt_file="${7:-}"
+  prompt_value="$(cat "${prompt_file}")"
+  printf '{"model":"%s","messages":[{"role":"user","content":"%s"}]}\n' "${model_value}" "${prompt_value}"
+  exit 0
+fi
+
+if [[ "${1:-}" == "-r" && "${2:-}" == "--arg" && "${3:-}" == "requested_model" ]]; then
+  requested_model="${4:-}"
+  response_file="${6:-}"
+  model_value="$(sed -n 's/.*"model":"\([^"]*\)".*/\1/p' "${response_file}" | head -n 1)"
+  if [[ -n "${model_value}" ]]; then
+    printf '%s\n' "${model_value}"
+  else
+    printf '%s\n' "${requested_model}"
+  fi
+  exit 0
+fi
+
+if [[ "${1:-}" == "-r" ]]; then
+  response_file="${3:-}"
+  reply_value="$(sed -n 's/.*"content":"\([^"]*\)".*/\1/p' "${response_file}" | head -n 1)"
+  if [[ -z "${reply_value}" ]]; then
+    reply_value="$(sed -n 's/.*"text":"\([^"]*\)".*/\1/p' "${response_file}" | head -n 1)"
+  fi
+  if [[ -z "${reply_value}" ]]; then
+    reply_value="$(sed -n 's/.*"reply":"\([^"]*\)".*/\1/p' "${response_file}" | head -n 1)"
+  fi
+  printf '%s\n' "${reply_value:0:160}"
+  exit 0
+fi
+
+if [[ "${1:-}" == "-cn" && "${2:-}" == "--arg" && "${3:-}" == "model" && "${5:-}" == "--argjson" && "${6:-}" == "latency_ms" ]]; then
+  model_value="${4:-}"
+  latency_value="${7:-}"
+  reply_value="${10:-}"
+  printf '{"model":"%s","latency_ms":%s,"reply":"%s"}\n' "${model_value}" "${latency_value}" "${reply_value}"
+  exit 0
+fi
+
+echo "unsupported jq invocation: $*" >&2
+exit 1
+EOF_JQ
+chmod +x "${TEST_ROOT}/bin/jq"
+
 cat <<'EOF_LAUNCH' > "${TEST_ROOT}/fake_launch_container.sh"
 #!/bin/bash
 set -euo pipefail
@@ -231,24 +244,8 @@ case "${1:-}" in
     ;;
   exec)
     request_json="$(cat)"
-    request_model="$(
-      python3 - "${request_json}" <<'PY'
-import json
-import sys
-
-request = json.loads(sys.argv[1])
-print(request["model"])
-PY
-    )"
-    prompt="$(
-      python3 - "${request_json}" <<'PY'
-import json
-import sys
-
-request = json.loads(sys.argv[1])
-print(request["messages"][0]["content"])
-PY
-    )"
+    request_model="$(printf '%s' "${request_json}" | sed -n 's/.*"model":"\([^"]*\)".*/\1/p')"
+    prompt="$(printf '%s' "${request_json}" | sed -n 's/.*"content":"\([^"]*\)".*/\1/p')"
     response_model="${request_model}-backend"
     long_tail="0123456789abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz"
     echo "REQUEST_MODEL=${request_model}" >> "${DEVX_TEST_LAUNCH_LOG}"

@@ -135,61 +135,35 @@ build_chat_completion_request_json() {
   local model_id="$1"
   local prompt_file="$2"
 
-  python3 - "${model_id}" "${prompt_file}" <<'PY'
-import json
-import sys
-
-with open(sys.argv[2], "r", encoding="utf-8") as fh:
-    prompt = fh.read()
-
-payload = {
-    "model": sys.argv[1],
-    "messages": [{"role": "user", "content": prompt}],
-}
-print(json.dumps(payload, separators=(",", ":")))
-PY
+  jq -cn \
+    --arg model "${model_id}" \
+    --rawfile prompt "${prompt_file}" \
+    '{model: $model, messages: [{role: "user", content: $prompt}]}'
 }
 
 format_query_response_json() {
   local requested_model_id="$1"
   local latency_ms="$2"
   local response_file="$3"
+  local response_model
+  local reply_excerpt
 
-  python3 - "${requested_model_id}" "${latency_ms}" "${response_file}" <<'PY'
-import json
-import sys
+  response_model="$(jq -r --arg requested_model "${requested_model_id}" '.model // $requested_model' "${response_file}")" || return 1
+  reply_excerpt="$(jq -r '(.choices[0].message.content // .choices[0].text // .reply // empty) | tostring | .[0:160]' "${response_file}")" || return 1
 
-requested_model = sys.argv[1]
-latency_ms = int(sys.argv[2])
-response_file = sys.argv[3]
-reply = ""
+  if [[ -z "${reply_excerpt}" ]]; then
+    echo "query: launcher response did not include a reply" >&2
+    return 1
+  fi
 
-with open(response_file, "r", encoding="utf-8") as fh:
-    response = json.load(fh)
-
-choices = response.get("choices") or []
-if choices:
-    first_choice = choices[0] or {}
-    message = first_choice.get("message") or {}
-    reply = message.get("content") or first_choice.get("text") or ""
-else:
-    reply = response.get("reply") or ""
-
-if not reply:
-    raise SystemExit("query: launcher response did not include a reply")
-
-reply_excerpt = reply[:160]
-
-payload = {
-    "model": response.get("model") or requested_model,
-    "latency_ms": latency_ms,
-    "reply": reply_excerpt,
-}
-print(json.dumps(payload, separators=(",", ":")))
-PY
+  jq -cn \
+    --arg model "${response_model}" \
+    --argjson latency_ms "${latency_ms}" \
+    --arg reply "${reply_excerpt}" \
+    '{model: $model, latency_ms: $latency_ms, reply: $reply}'
 }
 
-query() {
+query() (
   local preset_name=""
   local prompt=""
 
@@ -228,7 +202,7 @@ query() {
   fi
 
   require_preset "${preset_name}"
-  require_command python3
+  require_command jq
 
   local model_id
   local prompt_file
@@ -242,6 +216,7 @@ query() {
 
   model_id="$(preset_model_id "${preset_name}")"
   temp_dir="$(mktemp -d)"
+  trap 'rm -rf "${temp_dir}"' EXIT
   prompt_file="${temp_dir}/prompt.txt"
   request_file="${temp_dir}/request.json"
   response_file="${temp_dir}/response.json"
@@ -253,19 +228,16 @@ query() {
     run_launch_container exec -T dynamo-frontend \
     bash -lc 'curl --silent --show-error --fail -H "Content-Type: application/json" --data-binary @- http://127.0.0.1:8000/v1/chat/completions' \
     <"${request_file}" >"${response_file}"; then
-    rm -rf "${temp_dir}"
     return 1
   fi
   end_ns="$(date +%s%N)"
   latency_ms=$(( (end_ns - start_ns) / 1000000 ))
 
   if ! normalized_json="$(format_query_response_json "${model_id}" "${latency_ms}" "${response_file}")"; then
-    rm -rf "${temp_dir}"
     return 1
   fi
-  rm -rf "${temp_dir}"
   printf '%s\n' "${normalized_json}"
-}
+)
 
 if [[ "${DEVX_DUMP_LAUNCH_CONTAINER_SH:-0}" == "1" ]]; then
   resolve_launch_container_script
