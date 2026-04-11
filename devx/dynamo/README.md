@@ -42,7 +42,7 @@ Upstream answers for the local v1 contract:
 
 ## Exact service list
 
-### `main`
+### `dynamo-frontend`
 
 Role: Compose service that hosts the Dynamo frontend process for local
 developer routing.
@@ -58,7 +58,7 @@ python -m dynamo.frontend \
   --http-port "${DYN_HTTP_PORT}"
 ```
 
-### `vllm-runtime`
+### `dynamo-vllm-worker`
 
 Role: the single local backend that registers itself with Dynamo.
 
@@ -84,12 +84,25 @@ These upstream services are not part of the pinned local topology:
 The local topology depends on a shared filesystem path for file discovery, not
 on extra network services.
 
+### `vllm-runtime` remains separate
+
+The direct source-backed `vllm-runtime` from `devx/` stays in the stack for
+repo development and direct HTTP testing. It is intentionally not the Dynamo
+backend in v1, because upstream `ai-dynamo==1.0.1` does not run cleanly
+against the repo's current `vllm==0.19.x` source/API surface.
+
+The routed Dynamo path therefore uses a Dynamo-pinned worker image
+(`nvcr.io/nvidia/ai-dynamo/vllm-runtime:1.0.1`) while the direct path keeps the
+repo-under-test runtime. This boundary is deliberate and should remain
+explicit until upstream Dynamo catches up to the newer vLLM API surface.
+
 ## Process roles
 
 | Service | Process | Role in v1 |
 | --- | --- | --- |
-| `main` | `python -m dynamo.frontend` | OpenAI-compatible HTTP entrypoint and worker discovery consumer |
-| `vllm-runtime` | `python -m dynamo.vllm` | Registers `backend.generate` and serves the actual model through Dynamo |
+| `dynamo-frontend` | `python -m dynamo.frontend` | OpenAI-compatible HTTP entrypoint and worker discovery consumer |
+| `dynamo-vllm-worker` | `python -m dynamo.vllm` | Registers `backend.generate` and serves the actual model through Dynamo |
+| `vllm-runtime` | `python -m vllm.entrypoints.openai.api_server` | Direct source-backed comparison path outside Dynamo |
 
 ## Required environment
 

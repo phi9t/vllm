@@ -5,6 +5,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 
+cd /tmp
+
 die() {
   echo "start_frontend.sh: $*" >&2
   exit 1
@@ -101,6 +103,9 @@ export DYN_NAMESPACE="${DYNAMO_NAMESPACE}"
 export DYN_ROUTER_MODE="round-robin"
 export DYN_HTTP_HOST="${DYNAMO_FRONTEND_HOST}"
 export DYN_HTTP_PORT="${DYNAMO_FRONTEND_PORT}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-${HOME:-/tmp}/.cache}"
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-${HOME:-/tmp}/.config}"
+mkdir -p "${XDG_CACHE_HOME}" "${XDG_CONFIG_HOME}"
 
 exec "${PYTHON_BIN}" -m dynamo.frontend \
   --discovery-backend file \

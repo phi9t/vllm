@@ -9,11 +9,18 @@ version-one topology instead of a vague "minimal Dynamo" claim:
 
 - `main` runs the Dynamo frontend process via
   [`devx/dynamo/start_frontend.sh`](../../../devx/dynamo/start_frontend.sh).
-- `vllm-runtime` is the only backend and must run the Dynamo vLLM worker
-  (`python -m dynamo.vllm`), not a plain `vllm serve` process.
+- `dynamo-vllm-worker` is the Dynamo backend and runs the Dynamo vLLM worker
+  (`python -m dynamo.vllm`).
+- the direct source-backed `vllm-runtime` remains outside Dynamo so local repo
+  work can still compare direct vLLM behavior against the routed Dynamo path.
 - Discovery is `file`-backed through a shared `DYN_FILE_KV` path, and KV events
   stay disabled for this topology so local development does not require
   `etcd-server` or `nats-server`.
+
+This split is intentional: upstream `ai-dynamo==1.0.1` currently targets an
+older vLLM API surface than the repo's `vllm==0.19.x`, so the local routed path
+uses a Dynamo-pinned worker image while the direct path keeps the repo-under-
+test runtime.
 
 The topology contract, required environment, and routed-success probe are
 recorded in

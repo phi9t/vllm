@@ -99,7 +99,7 @@ services:
     restart: unless-stopped
     ipc: host
     shm_size: ${VLLM_RUNTIME_SHM_SIZE:-16g}
-    working_dir: /workspace/${PROJECT_ID}
+    working_dir: /tmp
     user: "${HOST_UID}:${HOST_GID}"
     environment:
       HOME: /home/kvothe
@@ -144,27 +144,33 @@ services:
               device_ids: ["${VLLM_RUNTIME_GPU_DEVICE_ID:-1}"]
               capabilities: [gpu]
 
-  sglang:
-    image: ${SGLANG_WORKER_IMAGE:-lmsysorg/sglang:latest}
-    container_name: ${STACK_NAME}-sglang
+  dynamo-frontend:
+    image: ${DYNAMO_IMAGE:-nvcr.io/nvidia/ai-dynamo/vllm-runtime:1.0.1}
+    container_name: ${STACK_NAME}-dynamo-frontend
     restart: unless-stopped
-    network_mode: host
-    ipc: host
+    working_dir: /tmp
     user: "0:0"
     environment:
+      HOME: /home/kvothe
       HOST_UID: ${HOST_UID:?HOST_UID must be set}
       HOST_GID: ${HOST_GID:?HOST_GID must be set}
-      HF_TOKEN: ${HF_TOKEN:-}
-      HOME: /tmp
-      HF_HOME: /tmp/.cache/huggingface
-      HUGGINGFACE_HUB_CACHE: /tmp/.cache/huggingface/hub
-      HF_DATASETS_CACHE: /tmp/.cache/huggingface/datasets
-      FLASHINFER_WORKSPACE_DIR: /tmp/.cache/flashinfer
-      TRANSFORMERS_CACHE: /tmp/.cache/transformers
-      TVM_FFI_CACHE_DIR: /tmp/.cache/tvm-ffi
-      MODELSCOPE_CACHE: /tmp/.cache/modelscope
-      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
-      SGLANG_USE_MODELSCOPE: ${SGLANG_USE_MODELSCOPE:-false}
+      HF_HOME: /home/kvothe/.cache/huggingface
+      HUGGINGFACE_HUB_CACHE: /home/kvothe/.cache/huggingface/hub
+      XDG_CACHE_HOME: /home/kvothe/.cache
+      XDG_CONFIG_HOME: /home/kvothe/.config
+      DYNAMO_FILE_KV: /var/lib/dynamo/file-kv
+      DYNAMO_NAMESPACE: ${DYNAMO_NAMESPACE:-${STACK_NAME}}
+      DYNAMO_FRONTEND_HOST: 0.0.0.0
+      DYNAMO_FRONTEND_PORT: ${DYNAMO_FRONTEND_PORT:-8000}
+    volumes:
+      - ${REPO_ROOT}:/workspace/${PROJECT_ID}:ro
+      - ${DEVX_HOST_DYNAMO_HOME_CACHE_DIR}:/home/kvothe/.cache
+      - ${DEVX_HOST_CACHE_HF_DIR}:/home/kvothe/.cache/huggingface
+      - ${DEVX_HOST_DYNAMO_HOME_CONFIG_DIR}:/home/kvothe/.config
+      - ${DEVX_HOST_DYNAMO_FILE_KV_DIR}:/var/lib/dynamo/file-kv
+      - ${DEVX_HOST_DYNAMO_TMP_DIR}:/tmp
+      - ${DEVX_HOST_DYNAMO_VAR_TMP_DIR}:/var/tmp
+      - ${DEVX_HOST_DYNAMO_LOGS_DIR}:/var/log/devx-dynamo
     entrypoint:
       - /bin/sh
       - -lc
@@ -172,24 +178,80 @@ services:
       - >-
         set -eu;
         if ! getent group "${HOST_GID:?HOST_GID must be set}" >/dev/null 2>&1; then
-          echo "devxhost:x:${HOST_GID:?HOST_GID must be set}:" >> /etc/group;
+          echo "kvothe:x:${HOST_GID:?HOST_GID must be set}:" >> /etc/group;
         fi;
         if ! getent passwd "${HOST_UID:?HOST_UID must be set}" >/dev/null 2>&1; then
-          echo "devxhost:x:${HOST_UID:?HOST_UID must be set}:${HOST_GID:?HOST_GID must be set}:devx host user:/tmp:/bin/sh" >> /etc/passwd;
+          echo "kvothe:x:${HOST_UID:?HOST_UID must be set}:${HOST_GID:?HOST_GID must be set}:kvothe:/home/kvothe:/bin/sh" >> /etc/passwd;
         fi;
-        exec setpriv --reuid "${HOST_UID:?HOST_UID must be set}" --regid "${HOST_GID:?HOST_GID must be set}" --clear-groups python3 -m sglang.launch_server --model-path "${SGLANG_MODEL_PATH:-Qwen/Qwen3.5-35B-A3B}" --host 0.0.0.0 --port "${SGLANG_PORT:-30001}" --mem-fraction-static "${SGLANG_MEM_FRACTION_STATIC:-0.9}" --tp-size "${SGLANG_TP_SIZE:-1}"
+        exec setpriv --reuid "${HOST_UID:?HOST_UID must be set}" --regid "${HOST_GID:?HOST_GID must be set}" --clear-groups bash /workspace/${PROJECT_ID}/devx/dynamo/start_frontend.sh
+    networks:
+      - devx-internal
+    healthcheck:
+      test:
+        ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:${DYNAMO_FRONTEND_PORT:-8000}/health')\" >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+  dynamo-vllm-worker:
+    image: ${DYNAMO_IMAGE:-nvcr.io/nvidia/ai-dynamo/vllm-runtime:1.0.1}
+    container_name: ${STACK_NAME}-dynamo-vllm-worker
+    restart: unless-stopped
+    ipc: host
+    shm_size: ${DYNAMO_WORKER_SHM_SIZE:-16g}
+    working_dir: /tmp
+    user: "0:0"
+    environment:
+      HOME: /home/kvothe
+      HOST_UID: ${HOST_UID:?HOST_UID must be set}
+      HOST_GID: ${HOST_GID:?HOST_GID must be set}
+      HF_TOKEN: ${HF_TOKEN:-}
+      HF_HOME: /home/kvothe/.cache/huggingface
+      HUGGINGFACE_HUB_CACHE: /home/kvothe/.cache/huggingface/hub
+      HF_DATASETS_CACHE: /home/kvothe/.cache/huggingface/datasets
+      TRANSFORMERS_CACHE: /home/kvothe/.cache/huggingface/hub
+      XDG_CACHE_HOME: /home/kvothe/.cache
+      XDG_CONFIG_HOME: /home/kvothe/.config
+      MPLCONFIGDIR: /home/kvothe/.config/matplotlib
+      FLASHINFER_WORKSPACE_BASE: /home/kvothe
+      TRITON_CACHE_DIR: /home/kvothe/.cache/triton
+      DYNAMO_FILE_KV: /var/lib/dynamo/file-kv
+      DYNAMO_NAMESPACE: ${DYNAMO_NAMESPACE:-${STACK_NAME}}
+      DYNAMO_MODEL: ${DYNAMO_MODEL:-${VLLM_MODEL:-Qwen/Qwen3-8B}}
+      DYNAMO_SYSTEM_PORT: ${DYNAMO_SYSTEM_PORT:-8081}
+      NVIDIA_VISIBLE_DEVICES: ${DYNAMO_WORKER_VISIBLE_DEVICES:-${DYNAMO_WORKER_GPU_DEVICE_ID:-2}}
+      NVIDIA_DRIVER_CAPABILITIES: ${NVIDIA_DRIVER_CAPABILITIES:-all}
     volumes:
-      - ${DEVX_HOST_CACHE_HF_DIR}:/tmp/.cache/huggingface
-      - ${DEVX_HOST_CACHE_FLASHINFER_DIR}:/tmp/.cache/flashinfer
-      - ${DEVX_HOST_CACHE_TRANSFORMERS_DIR}:/tmp/.cache/transformers
-      - ${DEVX_HOST_CACHE_TVM_FFI_DIR}:/tmp/.cache/tvm-ffi
-      - ${DEVX_HOST_CACHE_MODELSCOPE_DIR}:/tmp/.cache/modelscope
+      - ${REPO_ROOT}:/workspace/${PROJECT_ID}:ro
+      - ${DEVX_HOST_DYNAMO_HOME_CACHE_DIR}:/home/kvothe/.cache
+      - ${DEVX_HOST_CACHE_HF_DIR}:/home/kvothe/.cache/huggingface
+      - ${DEVX_HOST_DYNAMO_HOME_CONFIG_DIR}:/home/kvothe/.config
+      - ${DEVX_HOST_DYNAMO_FILE_KV_DIR}:/var/lib/dynamo/file-kv
+      - ${DEVX_HOST_DYNAMO_TMP_DIR}:/tmp
+      - ${DEVX_HOST_DYNAMO_VAR_TMP_DIR}:/var/tmp
+      - ${DEVX_HOST_DYNAMO_LOGS_DIR}:/var/log/devx-dynamo
+    entrypoint:
+      - /bin/sh
+      - -lc
+    command:
+      - >-
+        set -eu;
+        if ! getent group "${HOST_GID:?HOST_GID must be set}" >/dev/null 2>&1; then
+          echo "kvothe:x:${HOST_GID:?HOST_GID must be set}:" >> /etc/group;
+        fi;
+        if ! getent passwd "${HOST_UID:?HOST_UID must be set}" >/dev/null 2>&1; then
+          echo "kvothe:x:${HOST_UID:?HOST_UID must be set}:${HOST_GID:?HOST_GID must be set}:kvothe:/home/kvothe:/bin/sh" >> /etc/passwd;
+        fi;
+        exec setpriv --reuid "${HOST_UID:?HOST_UID must be set}" --regid "${HOST_GID:?HOST_GID must be set}" --clear-groups bash /workspace/${PROJECT_ID}/devx/dynamo/start_vllm_worker.sh
+    networks:
+      - devx-internal
     ulimits:
       memlock: -1
       stack: 67108864
     healthcheck:
       test:
-        ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:${SGLANG_PORT:-30001}/health')\" >/dev/null 2>&1 || exit 1"]
+        ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:${DYNAMO_SYSTEM_PORT:-8081}/health')\" >/dev/null 2>&1 || exit 1"]
       interval: 15s
       timeout: 10s
       retries: 20
@@ -199,43 +261,8 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ["${SGLANG_GPU_DEVICE_ID:-0}"]
+              device_ids: ["${DYNAMO_WORKER_GPU_DEVICE_ID:-2}"]
               capabilities: [gpu]
-
-  ollama:
-    image: ${OLLAMA_IMAGE:-ollama/ollama}
-    container_name: ${STACK_NAME}-ollama
-    restart: unless-stopped
-    network_mode: host
-    user: "0:0"
-    environment:
-      HOST_UID: ${HOST_UID:?HOST_UID must be set}
-      HOST_GID: ${HOST_GID:?HOST_GID must be set}
-      HOME: /tmp
-      OLLAMA_HOST: 0.0.0.0:${OLLAMA_PORT:-11434}
-      OLLAMA_MODELS: /tmp/.ollama/models
-    entrypoint:
-      - /bin/sh
-      - -lc
-    command:
-      - >-
-        set -eu;
-        if ! getent group "${HOST_GID:?HOST_GID must be set}" >/dev/null 2>&1; then
-          echo "devxhost:x:${HOST_GID:?HOST_GID must be set}:" >> /etc/group;
-        fi;
-        if ! getent passwd "${HOST_UID:?HOST_UID must be set}" >/dev/null 2>&1; then
-          echo "devxhost:x:${HOST_UID:?HOST_UID must be set}:${HOST_GID:?HOST_GID must be set}:devx host user:/tmp:/bin/sh" >> /etc/passwd;
-        fi;
-        exec setpriv --reuid "${HOST_UID:?HOST_UID must be set}" --regid "${HOST_GID:?HOST_GID must be set}" --clear-groups ollama serve
-    volumes:
-      - ${DEVX_HOST_OLLAMA_DIR}:/tmp/.ollama
-    healthcheck:
-      test:
-        ["CMD-SHELL", "ollama list >/dev/null 2>&1 || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 10
-      start_period: 20s
 
 networks:
   devx-internal:
