@@ -13,7 +13,7 @@ usage() {
 Usage: devx <subcommand> [args]
 Subcommands:
   help
-  doctor
+  doctor [--preset <name>]
   up --preset <name>
   query --prompt "<text>" [--preset <name>]
   switch --preset <name>
@@ -23,7 +23,7 @@ EOF
 }
 
 doctor() {
-  local preset_name=""
+  local preset_name="qwen3-0.6b"
 
   while [[ $# -gt 0 ]]; do
     case "${1:-}" in
@@ -41,11 +41,6 @@ doctor() {
         ;;
     esac
   done
-
-  if [[ -z "${preset_name}" ]]; then
-    echo "doctor: --preset is required" >&2
-    return 1
-  fi
 
   require_preset "${preset_name}"
   local model_id

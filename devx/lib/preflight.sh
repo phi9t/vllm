@@ -24,13 +24,25 @@ require_huggingface_token_file() {
   fi
 }
 
-require_model_id_resolves() {
-  local model_id="${1:-}"
+read_huggingface_token() {
   local token_file
   local token
 
   token_file="$(resolve_huggingface_token_file)"
   token="$(tr -d '[:space:]' < "${token_file}")"
+  if [[ -z "${token}" ]]; then
+    echo "preflight: missing or empty token file: ${token_file}" >&2
+    return 1
+  fi
+
+  printf '%s\n' "${token}"
+}
+
+require_model_id_resolves() {
+  local model_id="${1:-}"
+  local token
+
+  token="$(read_huggingface_token)" || return 1
 
   if ! curl \
     --silent \
