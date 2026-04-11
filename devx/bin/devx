@@ -25,7 +25,14 @@ EOF
 }
 
 resolve_launch_container_script() {
-  printf '%s\n' "${DEVX_LAUNCH_CONTAINER_SH:-${SCRIPT_DIR}/launch_container.sh}"
+  if [[ -n "${DEVX_LAUNCH_CONTAINER_SH:-}" ]]; then
+    printf '%s\n' "${DEVX_LAUNCH_CONTAINER_SH}"
+    return 0
+  fi
+
+  local launch_container_dir
+  launch_container_dir="$(cd "${SCRIPT_DIR}/.." && pwd -P)"
+  printf '%s\n' "${launch_container_dir}/launch_container.sh"
 }
 
 run_launch_container() {
@@ -245,6 +252,11 @@ query() {
   normalized_json="$(format_query_response_json "${model_id}" "${latency_ms}" "${response_json}")"
   printf '%s\n' "${normalized_json}"
 }
+
+if [[ "${DEVX_DUMP_LAUNCH_CONTAINER_SH:-0}" == "1" ]]; then
+  resolve_launch_container_script
+  exit 0
+fi
 
 cmd="${1:-help}"
 shift || true
