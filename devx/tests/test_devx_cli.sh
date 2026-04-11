@@ -75,6 +75,14 @@ esac
 EOF_CURL
 chmod +x "${TEST_ROOT}/bin/curl"
 
+cat <<'EOF_JQ' > "${TEST_ROOT}/bin/jq"
+#!/bin/bash
+set -euo pipefail
+
+exit 0
+EOF_JQ
+chmod +x "${TEST_ROOT}/bin/jq"
+
 printf 'hf_test_token\n' > "${TEST_ROOT}/home/.devx/special-circ-phi9t-vllm/secrets/huggingface_token"
 
 if ! PATH="${TEST_ROOT}/bin:${PATH}" HOME="${TEST_ROOT}/home" \

@@ -89,6 +89,14 @@ EOF_CURL
 sed -i "s|__CURL_LOG__|${TEST_ROOT}/curl.log|g" "${TEST_ROOT}/bin/curl"
 chmod +x "${TEST_ROOT}/bin/curl"
 
+cat <<'EOF_JQ' > "${TEST_ROOT}/bin/jq"
+#!/bin/bash
+set -euo pipefail
+
+exit 0
+EOF_JQ
+chmod +x "${TEST_ROOT}/bin/jq"
+
 run_doctor() {
   local home_dir="$1"
   shift
