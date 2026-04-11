@@ -1,0 +1,40 @@
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+# shellcheck disable=SC1091
+source "${REPO_ROOT}/devx/lib/presets.sh"
+
+usage() {
+  cat <<'EOF'
+Usage: devx <subcommand> [args]
+Subcommands:
+  help
+  doctor
+  up --preset <name>
+  query --prompt "<text>" [--preset <name>]
+  switch --preset <name>
+  experiment run -f <manifest.yaml>
+  experiment report <run-id>
+EOF
+}
+
+cmd="${1:-help}"
+shift || true
+
+case "${cmd}" in
+  help)
+    usage
+    ;;
+  doctor|up|query|switch|experiment)
+    echo "not yet implemented: ${cmd}" >&2
+    exit 2
+    ;;
+  *)
+    echo "unknown subcommand: ${cmd}" >&2
+    usage >&2
+    exit 1
+    ;;
+esac
