@@ -61,6 +61,7 @@ run_preflight() {
 
   require_command docker
   require_command curl
+  require_command jq
 
   docker version >/dev/null
   docker compose version >/dev/null
