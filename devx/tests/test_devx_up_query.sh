@@ -110,6 +110,24 @@ cat <<'EOF_CURL' > "${TEST_ROOT}/bin/curl"
 #!/bin/bash
 set -euo pipefail
 
+expected_url="${DEVX_EXPECTED_HF_MODEL_URL:-}"
+actual_url="${*: -1}"
+
+if [[ -n "${DEVX_TEST_CURL_LOG:-}" ]]; then
+  echo "${actual_url}" >> "${DEVX_TEST_CURL_LOG}"
+fi
+
+if [[ -z "${expected_url}" ]]; then
+  echo "DEVX_EXPECTED_HF_MODEL_URL must be set for this test" >&2
+  exit 1
+fi
+
+if [[ "${actual_url}" != "${expected_url}" ]]; then
+  echo "unexpected curl URL: ${actual_url}" >&2
+  echo "expected: ${expected_url}" >&2
+  exit 1
+fi
+
 exit 0
 EOF_CURL
 chmod +x "${TEST_ROOT}/bin/curl"
@@ -128,18 +146,30 @@ case "${1:-}" in
     exit 0
     ;;
   exec)
-    model="${DYNAMO_MODEL:-${VLLM_MODEL:-missing/model}}"
-    prompt="$(
-      DEVX_FAKE_QUERY_PAYLOAD="${DEVX_QUERY_PAYLOAD:-}" python3 - <<'PY'
+    request_json="$(cat)"
+    request_model="$(
+      python3 - "${request_json}" <<'PY'
 import json
-import os
+import sys
 
-payload = json.loads(os.environ["DEVX_FAKE_QUERY_PAYLOAD"])
-print(payload["messages"][0]["content"])
+request = json.loads(sys.argv[1])
+print(request["model"])
 PY
     )"
-    printf '{"model":"%s","choices":[{"message":{"content":"reply for %s: %s"}}]}\n' \
-      "${model}" "${model}" "${prompt}"
+    prompt="$(
+      python3 - "${request_json}" <<'PY'
+import json
+import sys
+
+request = json.loads(sys.argv[1])
+print(request["messages"][0]["content"])
+PY
+    )"
+    response_model="${request_model}-backend"
+    echo "REQUEST_MODEL=${request_model}" >> "${DEVX_TEST_LAUNCH_LOG}"
+    echo "RESPONSE_MODEL=${response_model}" >> "${DEVX_TEST_LAUNCH_LOG}"
+    printf '{"model":"%s","choices":[{"message":{"content":"reply for request=%s response=%s: %s"}}]}\n' \
+      "${response_model}" "${request_model}" "${response_model}" "${prompt}"
     exit 0
     ;;
   *)
@@ -154,12 +184,16 @@ printf 'hf_test_token\n' > "${TEST_ROOT}/home/.devx/special-circ-phi9t-vllm/secr
 
 STATE_FILE="${TEST_ROOT}/state.env"
 LAUNCH_LOG="${TEST_ROOT}/launch.log"
+CURL_LOG="${TEST_ROOT}/curl.log"
+EXPECTED_HF_MODEL_URL="https://huggingface.co/api/models/Qwen/Qwen3-4B"
 
 if ! PATH="${TEST_ROOT}/bin:${PATH}" \
   HOME="${TEST_ROOT}/home" \
   DEVX_STATE_FILE="${STATE_FILE}" \
   DEVX_LAUNCH_CONTAINER_SH="${TEST_ROOT}/fake_launch_container.sh" \
   DEVX_TEST_LAUNCH_LOG="${LAUNCH_LOG}" \
+  DEVX_TEST_CURL_LOG="${CURL_LOG}" \
+  DEVX_EXPECTED_HF_MODEL_URL="${EXPECTED_HF_MODEL_URL}" \
   bash "${REPO_ROOT}/devx/bin/devx" up --preset qwen3-4b \
   >"${TEST_ROOT}/up.stdout" \
   2>"${TEST_ROOT}/up.stderr"; then
@@ -172,9 +206,7 @@ assert_contains "${TEST_ROOT}/up.stdout" "DEVX UP PASS: preset=qwen3-4b model=Qw
 assert_contains "${STATE_FILE}" "active_preset=qwen3-4b"
 assert_contains "${STATE_FILE}" "updated_at_unix="
 assert_contains "${LAUNCH_LOG}" "ARGS: up-rebuild"
-assert_contains "${LAUNCH_LOG}" "HF_TOKEN=hf_test_token"
-assert_contains "${LAUNCH_LOG}" "VLLM_MODEL=Qwen/Qwen3-4B"
-assert_contains "${LAUNCH_LOG}" "DYNAMO_MODEL=Qwen/Qwen3-4B"
+assert_contains "${CURL_LOG}" "${EXPECTED_HF_MODEL_URL}"
 
 if bash "${REPO_ROOT}/devx/bin/devx" query \
   >"${TEST_ROOT}/query-missing.stdout" \
@@ -198,11 +230,11 @@ if ! PATH="${TEST_ROOT}/bin:${PATH}" \
 fi
 
 assert_json_number_field "${TEST_ROOT}/query-default.stdout" '.latency_ms'
-assert_json_field "${TEST_ROOT}/query-default.stdout" '.model' 'Qwen/Qwen3-4B'
-assert_json_field "${TEST_ROOT}/query-default.stdout" '.reply' 'reply for Qwen/Qwen3-4B: default preset prompt'
+assert_json_field "${TEST_ROOT}/query-default.stdout" '.model' 'Qwen/Qwen3-4B-backend'
+assert_json_field "${TEST_ROOT}/query-default.stdout" '.reply' 'reply for request=Qwen/Qwen3-4B response=Qwen/Qwen3-4B-backend: default preset prompt'
 assert_contains "${LAUNCH_LOG}" "ARGS: exec -T dynamo-frontend"
-assert_contains "${LAUNCH_LOG}" "VLLM_MODEL=Qwen/Qwen3-4B"
-assert_contains "${LAUNCH_LOG}" "DYNAMO_MODEL=Qwen/Qwen3-4B"
+assert_contains "${LAUNCH_LOG}" "REQUEST_MODEL=Qwen/Qwen3-4B"
+assert_contains "${LAUNCH_LOG}" "RESPONSE_MODEL=Qwen/Qwen3-4B-backend"
 
 if ! PATH="${TEST_ROOT}/bin:${PATH}" \
   HOME="${TEST_ROOT}/home" \
@@ -217,9 +249,9 @@ if ! PATH="${TEST_ROOT}/bin:${PATH}" \
   exit 1
 fi
 
-assert_json_field "${TEST_ROOT}/query-explicit.stdout" '.model' 'Qwen/Qwen3-0.6B'
-assert_json_field "${TEST_ROOT}/query-explicit.stdout" '.reply' 'reply for Qwen/Qwen3-0.6B: explicit preset prompt'
-assert_contains "${LAUNCH_LOG}" "VLLM_MODEL=Qwen/Qwen3-0.6B"
-assert_contains "${LAUNCH_LOG}" "DYNAMO_MODEL=Qwen/Qwen3-0.6B"
+assert_json_field "${TEST_ROOT}/query-explicit.stdout" '.model' 'Qwen/Qwen3-0.6B-backend'
+assert_json_field "${TEST_ROOT}/query-explicit.stdout" '.reply' 'reply for request=Qwen/Qwen3-0.6B response=Qwen/Qwen3-0.6B-backend: explicit preset prompt'
+assert_contains "${LAUNCH_LOG}" "REQUEST_MODEL=Qwen/Qwen3-0.6B"
+assert_contains "${LAUNCH_LOG}" "RESPONSE_MODEL=Qwen/Qwen3-0.6B-backend"
 
 echo "PASS"
