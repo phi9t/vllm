@@ -105,7 +105,7 @@ if [[ "${unknown_exit_code}" -ne 1 ]]; then
 fi
 assert_contains "${TEST_ROOT}/unknown.err" "unknown subcommand"
 
-for cmd in up query switch experiment; do
+for cmd in switch experiment; do
   stdout_file="${TEST_ROOT}/${cmd}.out"
   stderr_file="${TEST_ROOT}/${cmd}.err"
   if bash "${REPO_ROOT}/devx/bin/devx" "${cmd}" >"${stdout_file}" 2>"${stderr_file}"; then

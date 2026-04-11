@@ -7,6 +7,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/../lib/presets.sh"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/../lib/preflight.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/../lib/state.sh"
 
 usage() {
   cat <<'EOF'
@@ -20,6 +22,21 @@ Subcommands:
   experiment run -f <manifest.yaml>
   experiment report <run-id>
 EOF
+}
+
+resolve_launch_container_script() {
+  printf '%s\n' "${DEVX_LAUNCH_CONTAINER_SH:-${SCRIPT_DIR}/launch_container.sh}"
+}
+
+run_launch_container() {
+  local launch_script
+
+  launch_script="$(resolve_launch_container_script)"
+  bash "${launch_script}" "$@"
+}
+
+now_unix() {
+  date -u +%s
 }
 
 doctor() {
@@ -48,6 +65,187 @@ doctor() {
   run_preflight "${model_id}"
 }
 
+up() {
+  local preset_name=""
+
+  while [[ $# -gt 0 ]]; do
+    case "${1:-}" in
+      --preset)
+        if [[ $# -lt 2 ]]; then
+          echo "up: missing value for --preset" >&2
+          return 1
+        fi
+        preset_name="${2}"
+        shift 2
+        ;;
+      *)
+        echo "up: unknown argument: ${1}" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if [[ -z "${preset_name}" ]]; then
+    echo "up: missing required --preset" >&2
+    return 1
+  fi
+
+  require_preset "${preset_name}"
+  local model_id
+  local hf_token
+
+  model_id="$(preset_model_id "${preset_name}")"
+  run_preflight "${model_id}"
+  hf_token="$(read_huggingface_token)"
+
+  if ! HF_TOKEN="${hf_token}" VLLM_MODEL="${model_id}" DYNAMO_MODEL="${model_id}" \
+    run_launch_container up-rebuild; then
+    return 1
+  fi
+
+  if ! HF_TOKEN="${hf_token}" VLLM_MODEL="${model_id}" DYNAMO_MODEL="${model_id}" \
+    run_launch_container verify-e2e; then
+    return 1
+  fi
+
+  write_session_state "${preset_name}" "$(now_unix)"
+  printf 'DEVX UP PASS: preset=%s model=%s\n' "${preset_name}" "${model_id}"
+}
+
+resolve_query_preset() {
+  local session_preset=""
+  if session_preset="$(read_session_active_preset 2>/dev/null)"; then
+    if [[ -n "${session_preset}" ]]; then
+      printf '%s\n' "${session_preset}"
+      return 0
+    fi
+  fi
+
+  printf '%s\n' "qwen3-0.6b"
+}
+
+build_chat_completion_request_json() {
+  local model_id="$1"
+  local prompt="$2"
+
+  DEVX_QUERY_MODEL="${model_id}" \
+    DEVX_QUERY_PROMPT="${prompt}" \
+    python3 - <<'PY'
+import json
+import os
+
+payload = {
+    "model": os.environ["DEVX_QUERY_MODEL"],
+    "messages": [{"role": "user", "content": os.environ["DEVX_QUERY_PROMPT"]}],
+}
+print(json.dumps(payload, separators=(",", ":")))
+PY
+}
+
+format_query_response_json() {
+  local model_id="$1"
+  local latency_ms="$2"
+  local response_json="$3"
+
+  DEVX_QUERY_MODEL="${model_id}" \
+  DEVX_QUERY_LATENCY_MS="${latency_ms}" \
+  DEVX_QUERY_RESPONSE_JSON="${response_json}" \
+  python3 - <<'PY'
+import json
+import os
+
+response = json.loads(os.environ["DEVX_QUERY_RESPONSE_JSON"])
+reply = ""
+
+choices = response.get("choices") or []
+if choices:
+    first_choice = choices[0] or {}
+    message = first_choice.get("message") or {}
+    reply = message.get("content") or first_choice.get("text") or ""
+else:
+    reply = response.get("reply") or ""
+
+if not reply:
+    raise SystemExit("query: launcher response did not include a reply")
+
+payload = {
+    "model": os.environ["DEVX_QUERY_MODEL"],
+    "latency_ms": int(os.environ["DEVX_QUERY_LATENCY_MS"]),
+    "reply": reply,
+}
+print(json.dumps(payload, separators=(",", ":")))
+PY
+}
+
+query() {
+  local preset_name=""
+  local prompt=""
+
+  while [[ $# -gt 0 ]]; do
+    case "${1:-}" in
+      --preset)
+        if [[ $# -lt 2 ]]; then
+          echo "query: missing value for --preset" >&2
+          return 1
+        fi
+        preset_name="${2}"
+        shift 2
+        ;;
+      --prompt)
+        if [[ $# -lt 2 ]]; then
+          echo "query: missing value for --prompt" >&2
+          return 1
+        fi
+        prompt="${2}"
+        shift 2
+        ;;
+      *)
+        echo "query: unknown argument: ${1}" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if [[ -z "${prompt}" ]]; then
+    echo "query: missing required --prompt" >&2
+    return 1
+  fi
+
+  if [[ -z "${preset_name}" ]]; then
+    preset_name="$(resolve_query_preset)"
+  fi
+
+  require_preset "${preset_name}"
+  require_command python3
+
+  local model_id
+  local request_json
+  local response_json
+  local normalized_json
+  local latency_ms
+  local start_ns
+  local end_ns
+
+  model_id="$(preset_model_id "${preset_name}")"
+  request_json="$(build_chat_completion_request_json "${model_id}" "${prompt}")"
+  start_ns="$(date +%s%N)"
+  response_json="$(
+    DEVX_QUERY_PAYLOAD="${request_json}" \
+    VLLM_MODEL="${model_id}" \
+    DYNAMO_MODEL="${model_id}" \
+    run_launch_container exec -T dynamo-frontend \
+      env VLLM_MODEL="${model_id}" \
+      DYNAMO_MODEL="${model_id}" \
+      DEVX_QUERY_PAYLOAD="${request_json}" \
+      bash -lc 'curl --silent --show-error --fail -H "Content-Type: application/json" -d "$DEVX_QUERY_PAYLOAD" http://127.0.0.1:8000/v1/chat/completions'
+  )"
+  end_ns="$(date +%s%N)"
+  latency_ms=$(( (end_ns - start_ns) / 1000000 ))
+
+  normalized_json="$(format_query_response_json "${model_id}" "${latency_ms}" "${response_json}")"
+  printf '%s\n' "${normalized_json}"
+}
+
 cmd="${1:-help}"
 shift || true
 
@@ -58,7 +256,13 @@ case "${cmd}" in
   doctor)
     doctor "$@"
     ;;
-  up|query|switch|experiment)
+  up)
+    up "$@"
+    ;;
+  query)
+    query "$@"
+    ;;
+  switch|experiment)
     echo "not yet implemented: ${cmd}" >&2
     exit 2
     ;;
