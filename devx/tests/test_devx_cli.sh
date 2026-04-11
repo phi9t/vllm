@@ -47,6 +47,12 @@ fi
 if bash "${REPO_ROOT}/devx/bin/devx" unknown >"${TEST_ROOT}/unknown.out" 2>"${TEST_ROOT}/unknown.err"; then
   echo "unknown command must fail" >&2
   exit 1
+else
+  unknown_exit_code=$?
+fi
+if [[ "${unknown_exit_code}" -ne 1 ]]; then
+  echo "unknown command must exit 1, got ${unknown_exit_code}" >&2
+  exit 1
 fi
 assert_contains "${TEST_ROOT}/unknown.err" "unknown subcommand"
 
@@ -55,6 +61,12 @@ for cmd in doctor up query switch experiment; do
   stderr_file="${TEST_ROOT}/${cmd}.err"
   if bash "${REPO_ROOT}/devx/bin/devx" "${cmd}" >"${stdout_file}" 2>"${stderr_file}"; then
     echo "${cmd} must fail until implemented" >&2
+    exit 1
+  else
+    cmd_exit_code=$?
+  fi
+  if [[ "${cmd_exit_code}" -ne 2 ]]; then
+    echo "${cmd} must exit 2, got ${cmd_exit_code}" >&2
     exit 1
   fi
   assert_contains "${stderr_file}" "not yet implemented: ${cmd}"
@@ -68,15 +80,27 @@ printf '%s\n' "${DEVX_PRESETS[@]}" >"${TEST_ROOT}/presets.txt"
 assert_contains "${TEST_ROOT}/presets.txt" "qwen3-0.6b"
 assert_contains "${TEST_ROOT}/presets.txt" "qwen3-4b"
 
-if [[ "$(preset_model_id qwen3-0.6b)" != "Qwen/Qwen3-0.6B" ]]; then
-  echo "preset_model_id qwen3-0.6b returned the wrong model id" >&2
-  exit 1
-fi
-
-if [[ "$(preset_model_id qwen3-4b)" != "Qwen/Qwen3-4B" ]]; then
-  echo "preset_model_id qwen3-4b returned the wrong model id" >&2
-  exit 1
-fi
+for preset in "${DEVX_PRESETS[@]}"; do
+  model_id="$(preset_model_id "${preset}")"
+  case "${preset}" in
+    qwen3-0.6b)
+      [[ "${model_id}" == "Qwen/Qwen3-0.6B" ]] || {
+        echo "preset_model_id ${preset} returned the wrong model id" >&2
+        exit 1
+      }
+      ;;
+    qwen3-4b)
+      [[ "${model_id}" == "Qwen/Qwen3-4B" ]] || {
+        echo "preset_model_id ${preset} returned the wrong model id" >&2
+        exit 1
+      }
+      ;;
+    *)
+      echo "unexpected preset in DEVX_PRESETS: ${preset}" >&2
+      exit 1
+      ;;
+  esac
+done
 
 if preset_model_id does-not-exist >/dev/null 2>&1; then
   echo "preset_model_id must fail for unknown presets" >&2
