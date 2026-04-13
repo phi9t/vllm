@@ -185,6 +185,13 @@ if [[ "${1:-}" == "-cn" && "${2:-}" == "--arg" && "${3:-}" == "model" && "${5:-}
   exit 0
 fi
 
+if [[ "${1:-}" == "-cn" && "${2:-}" == "--arg" && "${3:-}" == "model" && "${5:-}" == "--arg" && "${6:-}" == "prompt" ]]; then
+  model_value="${4:-}"
+  prompt_value="${7:-}"
+  printf '{"model":"%s","messages":[{"role":"user","content":"%s"}]}\n' "${model_value}" "${prompt_value}"
+  exit 0
+fi
+
 if [[ "${1:-}" == "-r" && "${2:-}" == "--arg" && "${3:-}" == "requested_model" ]]; then
   requested_model="${4:-}"
   response_file="${6:-}"

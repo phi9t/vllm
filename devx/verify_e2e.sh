@@ -8,6 +8,8 @@ COMPOSE_FILE="${REPO_ROOT}/devx/compose.yaml"
 EXPECTED_MODEL="${DYNAMO_MODEL:-${VLLM_MODEL:-Qwen/Qwen3.5-7B-Instruct}}"
 VLLM_RUNTIME_PORT="${VLLM_RUNTIME_PORT:-8000}"
 DYNAMO_SYSTEM_PORT="${DYNAMO_SYSTEM_PORT:-8081}"
+VERIFY_E2E_ATTEMPTS="${VERIFY_E2E_ATTEMPTS:-60}"
+VERIFY_E2E_DELAY_SECONDS="${VERIFY_E2E_DELAY_SECONDS:-3}"
 FAIL_REASON=""
 
 # shellcheck disable=SC1091
@@ -131,8 +133,29 @@ check_compose_services_visibility() {
   return 0
 }
 
+run_with_retries() {
+  local name="$1"
+  local max_tries="$2"
+  local delay_seconds="$3"
+  shift 3
+
+  local attempt
+  for attempt in $(seq 1 "${max_tries}"); do
+    if "$@"; then
+      return 0
+    fi
+
+    if (( attempt < max_tries )); then
+      echo "${name}: retrying (${attempt}/${max_tries}) in ${delay_seconds}s" >&2
+      sleep "${delay_seconds}"
+    fi
+  done
+
+  return 1
+}
+
 check_vllm_runtime_health() {
-  if ! "${DOCKER_COMPOSE[@]}" exec -T vllm-runtime \
+  if ! run_with_retries "vllm-runtime /health" "${VERIFY_E2E_ATTEMPTS}" "${VERIFY_E2E_DELAY_SECONDS}" "${DOCKER_COMPOSE[@]}" exec -T vllm-runtime \
     python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:${VLLM_RUNTIME_PORT}/health')" \
     >/dev/null 2>&1; then
     FAIL_REASON="vllm-runtime /health probe failed"
@@ -143,7 +166,7 @@ check_vllm_runtime_health() {
 }
 
 check_dynamo_worker_health() {
-  if ! "${DOCKER_COMPOSE[@]}" exec -T dynamo-vllm-worker \
+  if ! run_with_retries "dynamo-vllm-worker /health" "${VERIFY_E2E_ATTEMPTS}" "${VERIFY_E2E_DELAY_SECONDS}" "${DOCKER_COMPOSE[@]}" exec -T dynamo-vllm-worker \
     python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:${DYNAMO_SYSTEM_PORT}/health')" \
     >/dev/null 2>&1; then
     FAIL_REASON="dynamo-vllm-worker /health probe failed"
@@ -154,7 +177,7 @@ check_dynamo_worker_health() {
 }
 
 check_frontend_routing() {
-  if ! "${DOCKER_COMPOSE[@]}" exec -T dynamo-frontend \
+  if ! run_with_retries "dynamo frontend route/models/chat" "${VERIFY_E2E_ATTEMPTS}" "${VERIFY_E2E_DELAY_SECONDS}" "${DOCKER_COMPOSE[@]}" exec -T dynamo-frontend \
     env DYNAMO_EXPECTED_MODEL="${EXPECTED_MODEL}" \
     bash "/workspace/${PROJECT_ID}/devx/dynamo/start_backend_probe.sh" \
     >/dev/null 2>&1; then
