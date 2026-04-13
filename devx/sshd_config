@@ -32,6 +32,8 @@ Subsystem sftp internal-sftp
 # Improve stability under bursts and multiplexing
 MaxStartups 10:30:100
 MaxSessions 100
+# Avoid SSH client-side agent spraying causing authentication failures on hosts with many keys.
+MaxAuthTries 32
 
 PermitTTY yes
 PidFile /run/devx/sshd.pid

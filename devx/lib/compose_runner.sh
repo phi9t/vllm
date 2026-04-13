@@ -231,10 +231,15 @@ execute_compose_runner() {
   fi
 
   if [[ "${action}" == "up" || "${action}" == "up-rebuild" ]]; then
+    local devx_ssh_cmd="ssh -o IdentitiesOnly=yes -o IdentityAgent=none -p ${SSH_PORT} ${CONTAINER_USER}@127.0.0.1"
+    if [[ -r "${HOME}/.ssh/devx_access" ]]; then
+      devx_ssh_cmd="ssh -o IdentitiesOnly=yes -i ${HOME}/.ssh/devx_access -p ${SSH_PORT} ${CONTAINER_USER}@127.0.0.1"
+    fi
+
     cat <<PRINT_EOF
 
 Developer stack is starting.
-SSH login: ssh -p ${SSH_PORT} ${CONTAINER_USER}@127.0.0.1
+SSH login: ${devx_ssh_cmd}
 Compose project: ${COMPOSE_PROJECT_NAME}
 PRINT_EOF
   fi

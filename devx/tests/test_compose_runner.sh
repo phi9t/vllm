@@ -40,6 +40,25 @@ assert_line_contains() {
   fi
 }
 
+run_up_rebuild_capture() {
+  local home_dir="$1"
+  local expected_ssh_line="$2"
+  local stdout_file="$3"
+  local stderr_file="$4"
+
+  if ! PATH="${TEST_ROOT}/bin:${PATH}" \
+    HOME="${home_dir}" \
+    bash "${REPO_ROOT}/devx/launch_container.sh" up-rebuild \
+    >"${stdout_file}" \
+    2>"${stderr_file}"; then
+    echo "up-rebuild should have completed successfully with HOME=${home_dir}" >&2
+    cat "${stderr_file}" >&2
+    exit 1
+  fi
+
+  assert_contains "${stdout_file}" "${expected_ssh_line}"
+}
+
 mkdir -p "${TEST_ROOT}/bin" "${TEST_ROOT}/home"
 
 # shellcheck disable=SC1091
@@ -94,15 +113,22 @@ else
   fi
 fi
 
-if ! PATH="${TEST_ROOT}/bin:${PATH}" \
-  HOME="${TEST_ROOT}/home" \
-  bash "${REPO_ROOT}/devx/launch_container.sh" up-rebuild \
-  >"${TEST_ROOT}/stdout" \
-  2>"${TEST_ROOT}/stderr"; then
-  echo "up-rebuild should have completed successfully" >&2
-  cat "${TEST_ROOT}/stderr" >&2
-  exit 1
-fi
+run_up_rebuild_capture \
+  "${TEST_ROOT}/home" \
+  "SSH login: ssh -o IdentitiesOnly=yes -o IdentityAgent=none -p 2222 kvothe@127.0.0.1" \
+  "${TEST_ROOT}/stdout" \
+  "${TEST_ROOT}/stderr"
+
+mkdir -p "${TEST_ROOT}/home-with-key/.ssh"
+printf '%s\n' "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILoopedexamplekey test-key" \
+  >"${TEST_ROOT}/home-with-key/.ssh/devx_access"
+chmod 600 "${TEST_ROOT}/home-with-key/.ssh/devx_access"
+
+run_up_rebuild_capture \
+  "${TEST_ROOT}/home-with-key" \
+  "SSH login: ssh -o IdentitiesOnly=yes -i ${TEST_ROOT}/home-with-key/.ssh/devx_access -p 2222 kvothe@127.0.0.1" \
+  "${TEST_ROOT}/stdout-with-key" \
+  "${TEST_ROOT}/stderr-with-key"
 
 assert_line_contains "${TEST_ROOT}/docker.log" 1 "compose version"
 assert_line_contains "${TEST_ROOT}/docker.log" 2 "compose --project-name ${EXPECTED_COMPOSE_PROJECT_NAME} -f ${REPO_ROOT}/devx/compose.yaml"
@@ -112,7 +138,7 @@ assert_line_contains "${TEST_ROOT}/docker.log" 3 "build vllm-runtime"
 assert_line_contains "${TEST_ROOT}/docker.log" 4 "compose --project-name ${EXPECTED_COMPOSE_PROJECT_NAME} -f ${REPO_ROOT}/devx/compose.yaml"
 assert_line_contains "${TEST_ROOT}/docker.log" 4 "up -d"
 assert_contains "${TEST_ROOT}/stdout" "Developer stack is starting."
-assert_contains "${TEST_ROOT}/stdout" "SSH login: ssh -p 2222 kvothe@127.0.0.1"
+assert_contains "${TEST_ROOT}/stdout" "SSH login: ssh -o IdentitiesOnly=yes -o IdentityAgent=none -p 2222 kvothe@127.0.0.1"
 assert_contains "${TEST_ROOT}/stdout" "Compose project: ${EXPECTED_COMPOSE_PROJECT_NAME}"
 
 echo "PASS"

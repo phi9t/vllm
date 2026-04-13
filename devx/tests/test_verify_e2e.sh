@@ -204,6 +204,26 @@ assert_contains "${TEST_ROOT}/worker-fail.stderr" "CHECKPOINT 5 FAIL"
 assert_not_contains "${TEST_ROOT}/worker-fail.stderr" "CHECKPOINT 6"
 assert_not_contains "${TEST_ROOT}/docker.log" "start_backend_probe.sh"
 
+reset_logs
+if PATH="${TEST_ROOT}/bin:${PATH}" \
+  HOME="${TEST_ROOT}/home" \
+  DYNAMO_TEST_SCENARIO=frontend-fail \
+  bash "${REPO_ROOT}/devx/verify_e2e.sh" \
+  >"${TEST_ROOT}/frontend-fail.stdout" \
+  2>"${TEST_ROOT}/frontend-fail.stderr"; then
+  echo "verify_e2e should fail when the frontend routing probe fails" >&2
+  exit 1
+fi
+
+assert_contains "${TEST_ROOT}/frontend-fail.stderr" "CHECKPOINT 1 PASS"
+assert_contains "${TEST_ROOT}/frontend-fail.stderr" "CHECKPOINT 2 PASS"
+assert_contains "${TEST_ROOT}/frontend-fail.stderr" "CHECKPOINT 3 PASS"
+assert_contains "${TEST_ROOT}/frontend-fail.stderr" "CHECKPOINT 4 PASS"
+assert_contains "${TEST_ROOT}/frontend-fail.stderr" "CHECKPOINT 5 PASS"
+assert_contains "${TEST_ROOT}/frontend-fail.stderr" "CHECKPOINT 6 FAIL"
+assert_not_contains "${TEST_ROOT}/frontend-fail.stderr" "CHECKPOINT 6 PASS"
+assert_contains "${TEST_ROOT}/docker.log" "start_backend_probe.sh"
+
 mkdir -p "${TEST_ROOT}/invalid-hdfs"
 reset_logs
 if PATH="${TEST_ROOT}/bin:${PATH}" \
