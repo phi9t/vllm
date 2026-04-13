@@ -26,6 +26,23 @@ read_session_updated_at_unix() {
   read_session_state_value "updated_at_unix"
 }
 
+format_session_active_preset() {
+  local active_preset="${1:-}"
+
+  if [[ -n "${active_preset}" ]]; then
+    printf '%s\n' "${active_preset}"
+  else
+    printf '%s\n' "none"
+  fi
+}
+
+clear_session_state() {
+  local state_file
+
+  state_file="$(resolve_session_state_file)"
+  rm -f "${state_file}"
+}
+
 write_session_state() {
   local active_preset="${1:-}"
   local updated_at_unix="${2:-}"
