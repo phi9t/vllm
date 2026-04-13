@@ -101,6 +101,13 @@ else
   exit 1
 fi
 
+assert_contains "${REPO_ROOT}/justfile" "doctor:"
+assert_contains "${REPO_ROOT}/justfile" "devx-up preset=\"qwen3-0.6b\":"
+assert_contains "${REPO_ROOT}/justfile" "devx-switch preset:"
+assert_contains "${REPO_ROOT}/justfile" "devx-query prompt:"
+assert_contains "${REPO_ROOT}/justfile" "devx-exp-run manifest:"
+assert_contains "${REPO_ROOT}/justfile" "devx-exp-report run_id:"
+
 if bash "${REPO_ROOT}/devx/bin/devx" unknown >"${TEST_ROOT}/unknown.out" 2>"${TEST_ROOT}/unknown.err"; then
   echo "unknown command must fail" >&2
   exit 1
@@ -113,22 +120,52 @@ if [[ "${unknown_exit_code}" -ne 1 ]]; then
 fi
 assert_contains "${TEST_ROOT}/unknown.err" "unknown subcommand"
 
-for cmd in switch experiment; do
-  stdout_file="${TEST_ROOT}/${cmd}.out"
-  stderr_file="${TEST_ROOT}/${cmd}.err"
-  if bash "${REPO_ROOT}/devx/bin/devx" "${cmd}" >"${stdout_file}" 2>"${stderr_file}"; then
-    echo "${cmd} must fail until implemented" >&2
-    exit 1
-  else
-    cmd_exit_code=$?
-  fi
-  if [[ "${cmd_exit_code}" -ne 2 ]]; then
-    echo "${cmd} must exit 2, got ${cmd_exit_code}" >&2
-    exit 1
-  fi
-  assert_contains "${stderr_file}" "not yet implemented: ${cmd}"
-  assert_not_contains "${stdout_file}" "not yet implemented: ${cmd}"
-done
+if bash "${REPO_ROOT}/devx/bin/devx" switch >"${TEST_ROOT}/switch-missing.out" 2>"${TEST_ROOT}/switch-missing.err"; then
+  echo "switch must fail without --preset" >&2
+  exit 1
+else
+  switch_exit_code=$?
+fi
+if [[ "${switch_exit_code}" -ne 1 ]]; then
+  echo "switch must exit 1 when --preset is missing, got ${switch_exit_code}" >&2
+  exit 1
+fi
+assert_contains "${TEST_ROOT}/switch-missing.err" "switch: missing required --preset"
+
+if bash "${REPO_ROOT}/devx/bin/devx" experiment >"${TEST_ROOT}/experiment.out" 2>"${TEST_ROOT}/experiment.err"; then
+  echo "experiment must fail without a subcommand" >&2
+  exit 1
+else
+  experiment_exit_code=$?
+fi
+if [[ "${experiment_exit_code}" -ne 1 ]]; then
+  echo "experiment must exit 1 when the subcommand is missing, got ${experiment_exit_code}" >&2
+  exit 1
+fi
+assert_contains "${TEST_ROOT}/experiment.err" "experiment: expected run|report"
+assert_not_contains "${TEST_ROOT}/experiment.out" "experiment: expected run|report"
+
+cat <<'EOF_MANIFEST' > "${TEST_ROOT}/experiment.yaml"
+runs:
+  - name: small
+    preset: qwen3-0.6b
+    prompts:
+      - "Reply with: ok"
+EOF_MANIFEST
+
+if bash "${REPO_ROOT}/devx/bin/devx" experiment run -f "${TEST_ROOT}/experiment.yaml" extra \
+  >"${TEST_ROOT}/experiment-run-extra.out" 2>"${TEST_ROOT}/experiment-run-extra.err"; then
+  echo "experiment run must reject trailing arguments" >&2
+  exit 1
+fi
+assert_contains "${TEST_ROOT}/experiment-run-extra.err" "experiment run: trailing arguments are not supported"
+
+if bash "${REPO_ROOT}/devx/bin/devx" experiment report run123 extra \
+  >"${TEST_ROOT}/experiment-report-extra.out" 2>"${TEST_ROOT}/experiment-report-extra.err"; then
+  echo "experiment report must reject trailing arguments" >&2
+  exit 1
+fi
+assert_contains "${TEST_ROOT}/experiment-report-extra.err" "experiment report: trailing arguments are not supported"
 
 # shellcheck disable=SC1090
 source "${PRESET_SCRIPT}"

@@ -9,6 +9,8 @@ source "${SCRIPT_DIR}/../lib/presets.sh"
 source "${SCRIPT_DIR}/../lib/preflight.sh"
 # shellcheck disable=SC1091
 source "${SCRIPT_DIR}/../lib/state.sh"
+# shellcheck disable=SC1091
+source "${SCRIPT_DIR}/../lib/experiments.sh"
 
 usage() {
   cat <<'EOF'
@@ -44,6 +46,27 @@ run_launch_container() {
 
 now_unix() {
   date -u +%s
+}
+
+run_preset_launch_flow() {
+  local preset_name="${1:-}"
+  local launch_command="${2:-}"
+  local model_id
+  local hf_token
+
+  require_preset "${preset_name}"
+  model_id="$(preset_model_id "${preset_name}")"
+  hf_token="$(read_huggingface_token)" || return 1
+
+  if ! HF_TOKEN="${hf_token}" VLLM_MODEL="${model_id}" DYNAMO_MODEL="${model_id}" \
+    run_launch_container "${launch_command}"; then
+    return 1
+  fi
+
+  if ! HF_TOKEN="${hf_token}" VLLM_MODEL="${model_id}" DYNAMO_MODEL="${model_id}" \
+    run_launch_container verify-e2e; then
+    return 1
+  fi
 }
 
 doctor() {
@@ -99,19 +122,11 @@ up() {
 
   require_preset "${preset_name}"
   local model_id
-  local hf_token
 
   model_id="$(preset_model_id "${preset_name}")"
   run_preflight "${model_id}"
-  hf_token="$(read_huggingface_token)"
 
-  if ! HF_TOKEN="${hf_token}" VLLM_MODEL="${model_id}" DYNAMO_MODEL="${model_id}" \
-    run_launch_container up-rebuild; then
-    return 1
-  fi
-
-  if ! HF_TOKEN="${hf_token}" VLLM_MODEL="${model_id}" DYNAMO_MODEL="${model_id}" \
-    run_launch_container verify-e2e; then
+  if ! run_preset_launch_flow "${preset_name}" up-rebuild; then
     return 1
   fi
 
@@ -134,10 +149,13 @@ resolve_query_preset() {
 build_chat_completion_request_json() {
   local model_id="$1"
   local prompt_file="$2"
+  local prompt
+
+  prompt="$(<"${prompt_file}")"
 
   jq -cn \
     --arg model "${model_id}" \
-    --rawfile prompt "${prompt_file}" \
+    --arg prompt "${prompt}" \
     '{model: $model, messages: [{role: "user", content: $prompt}]}'
 }
 
@@ -239,6 +257,56 @@ query() (
   printf '%s\n' "${normalized_json}"
 )
 
+switch() {
+  local preset_name=""
+  local current_preset=""
+  local current_preset_label
+
+  while [[ $# -gt 0 ]]; do
+    case "${1:-}" in
+      --preset)
+        if [[ $# -lt 2 ]]; then
+          echo "switch: missing value for --preset" >&2
+          return 1
+        fi
+        preset_name="${2}"
+        shift 2
+        ;;
+      *)
+        echo "switch: unknown argument: ${1}" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if [[ -z "${preset_name}" ]]; then
+    echo "switch: missing required --preset" >&2
+    return 1
+  fi
+
+  require_preset "${preset_name}"
+
+  if current_preset="$(read_session_active_preset 2>/dev/null)" && [[ -n "${current_preset}" ]]; then
+    :
+  else
+    current_preset=""
+  fi
+
+  current_preset_label="$(format_session_active_preset "${current_preset}")"
+
+  if [[ "${current_preset}" == "${preset_name}" ]]; then
+    printf 'DEVX SWITCH PASS: %s -> %s\n' "${current_preset_label}" "${preset_name}"
+    return 0
+  fi
+
+  if ! run_preset_launch_flow "${preset_name}" up; then
+    return 1
+  fi
+
+  write_session_state "${preset_name}" "$(now_unix)"
+  printf 'DEVX SWITCH PASS: %s -> %s\n' "${current_preset_label}" "${preset_name}"
+}
+
 if [[ "${DEVX_DUMP_LAUNCH_CONTAINER_SH:-0}" == "1" ]]; then
   resolve_launch_container_script
   exit 0
@@ -260,9 +328,41 @@ case "${cmd}" in
   query)
     query "$@"
     ;;
-  switch|experiment)
-    echo "not yet implemented: ${cmd}" >&2
-    exit 2
+  switch)
+    switch "$@"
+    ;;
+  experiment)
+    experiment_subcommand="${1:-}"
+    shift || true
+
+    case "${experiment_subcommand}" in
+      run)
+        if [[ "${1:-}" != "-f" || $# -lt 2 ]]; then
+          echo "experiment run: -f <manifest> required" >&2
+          exit 1
+        fi
+        if [[ $# -gt 2 ]]; then
+          echo "experiment run: trailing arguments are not supported" >&2
+          exit 1
+        fi
+        if ! run_id="$(run_experiment_manifest "${2}")"; then
+          exit 1
+        fi
+        printf 'RUN_ID=%s\n' "${run_id}"
+        printf 'RUN_DIR=%s\n' "$(resolve_experiment_run_dir_relative "${run_id}")"
+        ;;
+      report)
+        if [[ $# -gt 1 ]]; then
+          echo "experiment report: trailing arguments are not supported" >&2
+          exit 1
+        fi
+        report_experiment_run "${1:-}"
+        ;;
+      *)
+        echo "experiment: expected run|report" >&2
+        exit 1
+        ;;
+    esac
     ;;
   *)
     echo "unknown subcommand: ${cmd}" >&2
