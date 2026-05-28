@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Inventory the V1 attention backends and the selector's inputs.
 
 Pairs with HACKERS_GUIDE.md §8 (Attention backends).

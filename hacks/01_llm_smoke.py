@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Full pipeline smoke test on a tiny model.
 
 Pairs with HACKERS_GUIDE.md §3 (LLM.generate entry point).

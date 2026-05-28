@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Demonstrate that two prompts with a shared prefix produce equal block hashes.
 
 Pairs with HACKERS_GUIDE.md §6 (Paged attention & the KV cache manager).

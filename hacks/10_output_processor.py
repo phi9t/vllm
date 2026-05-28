@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Inspect OutputProcessor — what each method does in the request flow.
 
 Pairs with HACKERS_GUIDE.md §10 (Request lifecycle & output).

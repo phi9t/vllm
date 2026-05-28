@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Show a long prompt sliced across multiple steps (chunked prefill).
 
 Pairs with HACKERS_GUIDE.md §5 (The Scheduler).

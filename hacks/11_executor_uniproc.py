@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Tour the Executor abstraction and its concrete implementations.
 
 Pairs with HACKERS_GUIDE.md §11 (Workers & executors) and §12.

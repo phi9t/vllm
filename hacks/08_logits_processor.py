@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Write a custom LogitsProcessor that bans a token.
 
 Pairs with HACKERS_GUIDE.md §9 (Sampling).

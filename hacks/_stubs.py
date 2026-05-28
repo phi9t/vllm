@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Shared stubs/helpers for the hacks/ directory.
 
 These exist so each hack can exercise one V1 component without booting

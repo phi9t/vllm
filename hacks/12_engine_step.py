@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 """Capstone: drive one full engine step end-to-end with zero CUDA.
 
 Pairs with HACKERS_GUIDE.md §4 (EngineCore: the step loop).
