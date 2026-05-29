@@ -85,6 +85,18 @@ Canonical structure in [`src/App.tsx`](src/App.tsx):
 - **The lens abstraction** (architecture views): one diagram, reframed across
   flow / shapes / compute / memory by swapping the per-node metric — not by switching views.
   See [`src/architecture/ArchitectureExplorer.tsx`](src/architecture/ArchitectureExplorer.tsx).
+- **Circuit boxes auto-fit their text (no overflow).** Box widths in the Model Architecture
+  circuit are not hard-coded — they are computed per-manifest from monospace text length:
+  `width = chars × fontSize × ADV` (ADV ≈ 0.62, Fira Code 600-weight advance in viewBox units).
+  `cardWidth(label, kindTag, worstMetric)` measures the worst of the label+tag line and the
+  widest lens metric (shapes/compute/memory at `MAX_TOKENS`), adds padding and comfort margin,
+  and takes the max over all blocks in the manifest. Mainline boxes (`MAIN_W`) and branch panel
+  boxes (`CARD_W`) are computed independently; floors are enforced (`MAIN_W_MIN=180`,
+  `CARD_W_MIN=240`). `MAINLINE_X`, `CARD_X`, `SHELL_LEFT/RIGHT`, and `VIEW_W` all derive from
+  these measured widths. The invariant is enforced in
+  [`src/architecture/ModelCircuit.tsx`](src/architecture/ModelCircuit.tsx) — see the top-of-file
+  comment. The shared lens formatter `lensMetric()` lives in `blockTypes.ts` so both the
+  explorer panel and the width-measurement code use identical formatting.
 
 ## Building a new explorer mode
 

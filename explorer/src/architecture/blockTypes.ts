@@ -1,5 +1,12 @@
 import type { BlockKind, BlockType, ModelArch, ModelConfig } from './modelArch'
 
+// --- Lens type & shared constants --------------------------------------------
+
+export type Lens = 'flow' | 'shapes' | 'compute' | 'memory'
+
+/** Token count used for worst-case width measurement (matches slider max). */
+export const MAX_TOKENS = 4096
+
 // --- Formatters (ported from blockMath.ts) -----------------------------------
 
 export function dtypeBytes(cfg: ModelConfig): number {
@@ -30,6 +37,26 @@ export function fmtBytes(n: number): string {
   if (n >= 1 << 20) return `${(n / (1 << 20)).toFixed(2)} MiB`
   if (n >= 1 << 10) return `${(n / (1 << 10)).toFixed(1)} KiB`
   return `${n} B`
+}
+
+// --- Shared lens formatter ---------------------------------------------------
+
+/**
+ * Format the display metric for a block under the given lens.
+ * Mirrors the switch in ArchitectureExplorer.lensValue — single source of truth.
+ */
+export function lensMetric(m: BlockMetrics | undefined, lens: Lens): string {
+  if (!m) return ''
+  switch (lens) {
+    case 'shapes':
+      return m.shape
+    case 'compute':
+      return fmtFlops(m.flops)
+    case 'memory':
+      return m.kvBytes ? `KV ${fmtBytes(m.kvBytes)}` : m.params ? `${fmtCount(m.params)} p` : '—'
+    default:
+      return ''
+  }
 }
 
 // --- Kind colors (port from Qwen3Circuit + Phase 2/3 additions) --------------

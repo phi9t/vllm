@@ -5,8 +5,8 @@ import { cn } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Slider } from '@/components/ui/slider'
 import { sourceUrl } from '@/lib/assets'
-import { computeMetrics, fmtBytes, fmtCount, fmtFlops, summarize } from './blockTypes'
-import ModelCircuit, { type Lens } from './ModelCircuit'
+import { computeMetrics, fmtBytes, fmtCount, fmtFlops, lensMetric, summarize, type Lens } from './blockTypes'
+import ModelCircuit from './ModelCircuit'
 import type { Block, ModelArch, ModelIndexEntry } from './modelArch'
 
 const LENSES: { id: Lens; label: string }[] = [
@@ -88,19 +88,7 @@ export default function ArchitectureExplorer() {
   }
 
   const lensValue = (id: string): string => {
-    if (!metrics) return ''
-    const m = metrics[id]
-    if (!m) return ''
-    switch (lens) {
-      case 'shapes':
-        return m.shape
-      case 'compute':
-        return fmtFlops(m.flops)
-      case 'memory':
-        return m.kvBytes ? `KV ${fmtBytes(m.kvBytes)}` : m.params ? `${fmtCount(m.params)} p` : '—'
-      default:
-        return ''
-    }
+    return metrics ? lensMetric(metrics[id], lens) : ''
   }
 
   // Find the selected block across all block collections in the manifest

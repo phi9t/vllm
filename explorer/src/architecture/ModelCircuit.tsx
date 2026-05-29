@@ -1,21 +1,46 @@
+// INVARIANT: box widths are computed from monospace text length (textW) to fit the longest
+// label+tag/metric in viewBox units — never hard-code a width that text must fit inside.
+//
 // Generic residual-mainline diagram (Observatory glass).
 // Ported from Qwen3Circuit.tsx and generalized to render any ModelArch manifest.
 // Residual stream flows bottom (input) → top (output).
 // Branches tee off the mainline, run a pre-norm + step cards inside a tinted panel,
 // and merge back at a residual-add (+) node. Cards are selectable and carry lens metrics.
+import { useMemo } from 'react'
 import { cn } from '@/lib/utils'
-import { KIND_COLOR } from './blockTypes'
+import { KIND_COLOR, computeMetrics, lensMetric, MAX_TOKENS } from './blockTypes'
+import type { Lens } from './blockTypes'
 import type { Block, LayerGroup, ModelArch } from './modelArch'
 
-export type Lens = 'flow' | 'shapes' | 'compute' | 'memory'
+// Re-export Lens for files that still import it from here
+export type { Lens } from './blockTypes'
 
-// --- Geometry (viewBox units ≈ rendered px; the SVG is width-capped) ---------
-const VIEW_W = 524
-const MAINLINE_X = 106
-const CARD_X = 326
-const CARD_W = 300 // fits the longest step label ("KV decompression projection (B)", 31ch) + kind tag
+// --- Monospace text measurement (Fira Code, ~0.6em advance, weight 600) ------
+const ADV = 0.62         // mono advance (0.6em) + cushion for hinting / 600-weight
+const LABEL_PX = 12
+const METRIC_PX = 9
+const TAG_PX = 7.5
+const PAD_L = 16         // left padding inside card
+const PAD_R = 14         // right padding inside card
+const TAG_GAP = 12       // gap between label text end and kind tag text
+const COMFORT = 16       // extra breathing room per card (generous, no cramped text)
+const CARD_W_MIN = 240
+const MAIN_W_MIN = 180
+const LEFT_GUTTER = 12   // space left of mainline center
+const WIRE_RUN = 120     // horizontal distance from mainline to branch card center
+const RIGHT_MARGIN = 16  // right of shell
+
+const textW = (s: string, px: number) => s.length * px * ADV
+
+function cardWidth(label: string, kindTag: string | null, worstMetric: string): number {
+  const labelLine =
+    PAD_L + textW(label, LABEL_PX) + (kindTag ? TAG_GAP + textW(kindTag, TAG_PX) : 0) + PAD_R
+  const metricLine = PAD_L + textW(worstMetric, METRIC_PX) + PAD_R
+  return Math.ceil(Math.max(labelLine, metricLine) + COMFORT)
+}
+
+// --- Height geometry constants (y-layout is UNCHANGED) -----------------------
 const CARD_H = 32
-const MAIN_W = 196
 const MAIN_H = 30
 const CARD_PITCH = 44
 const PRENORM_GAP = 16
@@ -23,12 +48,71 @@ const JUNC_GAP = 18
 const MAIN_PITCH = 52
 const PAD = 46
 const SHELL_PAD = 16
-const SHELL_LEFT = CARD_X - CARD_W / 2 - SHELL_PAD
-const SHELL_RIGHT = CARD_X + CARD_W / 2 + SHELL_PAD
 
 /** Vertical span a branch occupies between its tee (bottom) and junction (top). */
 const branchHeight = (n: number) =>
   PRENORM_GAP + CARD_H / 2 + (n - 1) * CARD_PITCH + CARD_H / 2 + JUNC_GAP
+
+// --- Computed layout (per manifest) ------------------------------------------
+
+interface Layout {
+  CARD_W: number
+  MAIN_W: number
+  MAINLINE_X: number
+  CARD_X: number
+  SHELL_LEFT: number
+  SHELL_RIGHT: number
+  VIEW_W: number
+}
+
+function computeLayout(manifest: ModelArch): Layout {
+  // Compute worst-case metrics at MAX_TOKENS so widths are stable across slider
+  const worst = computeMetrics(manifest, MAX_TOKENS)
+
+  const worstMetric = (id: string): string => {
+    const m = worst[id]
+    if (!m) return ''
+    const candidates = [
+      lensMetric(m, 'shapes'),
+      lensMetric(m, 'compute'),
+      lensMetric(m, 'memory'),
+    ]
+    return candidates.reduce((a, b) => (b.length > a.length ? b : a), '')
+  }
+
+  // CARD_W = widest branch card across all layer groups
+  // Note: branch cards (including preNorm) all show the kind tag in BranchPanel
+  let CARD_W = CARD_W_MIN
+  for (const group of manifest.layers) {
+    for (const branch of group.branches) {
+      const preNormW = cardWidth(
+        branch.preNorm.label,
+        branch.preNorm.kind.toUpperCase(),
+        worstMetric(branch.preNorm.id),
+      )
+      CARD_W = Math.max(CARD_W, preNormW)
+      for (const step of branch.steps) {
+        const stepW = cardWidth(step.label, step.kind.toUpperCase(), worstMetric(step.id))
+        CARD_W = Math.max(CARD_W, stepW)
+      }
+    }
+  }
+
+  // MAIN_W = widest mainline card (prelude + head)
+  let MAIN_W = MAIN_W_MIN
+  for (const block of [...manifest.prelude, ...manifest.head]) {
+    const w = cardWidth(block.label, null, worstMetric(block.id))
+    MAIN_W = Math.max(MAIN_W, w)
+  }
+
+  const MAINLINE_X = MAIN_W / 2 + LEFT_GUTTER
+  const CARD_X = MAINLINE_X + WIRE_RUN + CARD_W / 2
+  const SHELL_LEFT = CARD_X - CARD_W / 2 - SHELL_PAD
+  const SHELL_RIGHT = CARD_X + CARD_W / 2 + SHELL_PAD
+  const VIEW_W = SHELL_RIGHT + RIGHT_MARGIN
+
+  return { CARD_W, MAIN_W, MAINLINE_X, CARD_X, SHELL_LEFT, SHELL_RIGHT, VIEW_W }
+}
 
 /** Orthogonal SVG path with rounded (quadratic) corners. */
 function roundedOrthPath(pts: [number, number][], r = 12): string {
@@ -65,6 +149,9 @@ export default function ModelCircuit({
   onSelect,
   lensValue,
 }: CircuitProps) {
+  const layout = useMemo(() => computeLayout(manifest), [manifest])
+  const { CARD_W, MAIN_W, MAINLINE_X, CARD_X, SHELL_LEFT, SHELL_RIGHT, VIEW_W } = layout
+
   const metric = (id: string) => (lens === 'flow' ? '' : lensValue(id))
 
   // Build layout bottom (input) → top (output).
@@ -144,7 +231,8 @@ export default function ModelCircuit({
   return (
     <svg
       viewBox={`0 0 ${VIEW_W} ${height}`}
-      className="mx-auto w-full max-w-[580px]"
+      className="mx-auto w-full"
+      style={{ maxWidth: layout.VIEW_W * 1.12 }}
       role="group"
       aria-label={`${manifest.model} decoder as a residual-mainline diagram; input enters at the bottom, output exits at the top`}
     >
@@ -230,6 +318,11 @@ export default function ModelCircuit({
               selectedId={selectedId}
               onSelect={onSelect}
               metric={metric}
+              MAINLINE_X={MAINLINE_X}
+              CARD_X={CARD_X}
+              CARD_W={CARD_W}
+              SHELL_LEFT={SHELL_LEFT}
+              SHELL_RIGHT={SHELL_RIGHT}
             />
             <PlusNode x={MAINLINE_X} y={yJunc} label={branch.name} />
           </g>
@@ -289,6 +382,11 @@ function BranchPanel({
   selectedId,
   onSelect,
   metric,
+  MAINLINE_X,
+  CARD_X,
+  CARD_W,
+  SHELL_LEFT,
+  SHELL_RIGHT,
 }: {
   name: string
   accent: string
@@ -299,6 +397,11 @@ function BranchPanel({
   selectedId: string
   onSelect: (id: string) => void
   metric: (id: string) => string
+  MAINLINE_X: number
+  CARD_X: number
+  CARD_W: number
+  SHELL_LEFT: number
+  SHELL_RIGHT: number
 }) {
   const cards = [preNorm, ...steps] // bottom → top
   const bottomCenter = yTee - PRENORM_GAP - CARD_H / 2
