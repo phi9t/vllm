@@ -24,7 +24,7 @@ const FAMILIES: { id: ExplorerFamily; label: string; icon: typeof Database; subt
     id: 'architecture',
     label: 'Model Architecture',
     icon: Boxes,
-    subtitle: 'Qwen3 dense model — the inference forward pass in vLLM',
+    subtitle: 'Inference forward pass — Qwen3 & DeepSeek (dense · MoE · MLA)',
   },
 ]
 

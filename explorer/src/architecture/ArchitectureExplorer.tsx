@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { ExternalLink } from 'lucide-react'
 import { fetchExplorerJson, errorMessage } from '@/lib/fetch'
 import { cn } from '@/lib/utils'
+import { AsyncBoundary } from '@/explorer-kit/AsyncBoundary'
+import { SubjectSwitcher } from '@/explorer-kit/SubjectSwitcher'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Slider } from '@/components/ui/slider'
 import { sourceUrl } from '@/lib/assets'
@@ -72,19 +74,16 @@ export default function ArchitectureExplorer() {
     [manifest, tokens],
   )
 
-  if (indexError) {
-    return (
-      <div className="panel p-6 text-danger">
-        Failed to load models/index.json: {indexError}
-        <p className="mt-2 text-sm text-ink-soft">
-          Generate it first: <code className="code-ref">./scripts/workflow.sh gen-data</code>
-        </p>
-      </div>
-    )
-  }
-
+  // Stage 1: index loading / error
   if (!index) {
-    return <div className="panel p-6 text-ink-soft">Loading model index…</div>
+    return (
+      <AsyncBoundary
+        loading={indexError === null}
+        error={indexError}
+        loadingLabel="Loading model index…"
+        errorPrefix="Failed to load models/index.json"
+      />
+    )
   }
 
   const lensValue = (id: string): string => {
@@ -121,6 +120,7 @@ export default function ArchitectureExplorer() {
           </p>
         </CardHeader>
         <CardContent className="flex flex-1 justify-center">
+          {/* Stage 2: per-model manifest loading / error — inline within the card */}
           {manifestLoading && (
             <div className="py-12 text-sm text-ink-soft">Loading {modelLabel}…</div>
           )}
@@ -147,20 +147,13 @@ export default function ArchitectureExplorer() {
           <CardContent className="flex flex-col gap-4 p-5">
             {/* Model switcher */}
             {index.length > 1 && (
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-ink-muted">Model</span>
-                <select
-                  value={slug ?? ''}
-                  onChange={(e) => setSlug(e.target.value)}
-                  className="rounded-lg border border-panelborder bg-panel px-2 py-1.5 text-xs text-ink focus:outline-none focus:border-panelborder-active"
-                >
-                  {index.map((entry) => (
-                    <option key={entry.slug} value={entry.slug}>
-                      {entry.label} ({fmtCount(entry.totalParams)})
-                    </option>
-                  ))}
-                </select>
-              </div>
+              <SubjectSwitcher
+                label="Model"
+                value={slug ?? ''}
+                options={index.map((e) => ({ value: e.slug, label: e.label }))}
+                onChange={setSlug}
+                ariaLabel="Model"
+              />
             )}
 
             <div className="flex flex-wrap items-center justify-between gap-4">

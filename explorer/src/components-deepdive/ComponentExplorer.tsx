@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { fetchExplorerJson, errorMessage } from '@/lib/fetch'
 import { cn } from '@/lib/utils'
+import { AsyncBoundary } from '@/explorer-kit/AsyncBoundary'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import ArchitectureGraph from './ArchitectureGraph'
 import ComponentDrawer from './ComponentDrawer'
@@ -71,17 +72,16 @@ export default function ComponentExplorer({
     }
   }
 
-  if (error) {
+  if (!manifest) {
     return (
-      <div className="panel p-6 text-danger">
-        Failed to load components.json: {error}
-        <p className="mt-2 text-sm text-ink-soft">
-          Generate it first: <code className="code-ref">./scripts/workflow.sh gen-data</code>
-        </p>
-      </div>
+      <AsyncBoundary
+        loading={error === null}
+        error={error}
+        loadingLabel="Loading component manifest…"
+        errorPrefix="Failed to load components.json"
+      />
     )
   }
-  if (!manifest) return <div className="panel p-6 text-ink-soft">Loading component manifest…</div>
 
   const selectedId =
     selected && manifest.nodes.find((n) => n.label === selected.title)?.id
