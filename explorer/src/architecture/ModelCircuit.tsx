@@ -10,10 +10,10 @@ import type { Block, LayerGroup, ModelArch } from './modelArch'
 export type Lens = 'flow' | 'shapes' | 'compute' | 'memory'
 
 // --- Geometry (viewBox units ≈ rendered px; the SVG is width-capped) ---------
-const VIEW_W = 510
+const VIEW_W = 524
 const MAINLINE_X = 106
 const CARD_X = 326
-const CARD_W = 252
+const CARD_W = 300 // fits the longest step label ("KV decompression projection (B)", 31ch) + kind tag
 const CARD_H = 32
 const MAIN_W = 196
 const MAIN_H = 30
@@ -144,7 +144,7 @@ export default function ModelCircuit({
   return (
     <svg
       viewBox={`0 0 ${VIEW_W} ${height}`}
-      className="mx-auto w-full max-w-[560px]"
+      className="mx-auto w-full max-w-[580px]"
       role="group"
       aria-label={`${manifest.model} decoder as a residual-mainline diagram; input enters at the bottom, output exits at the top`}
     >
