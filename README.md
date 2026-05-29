@@ -19,6 +19,14 @@ For events, please visit [vllm.ai/events](https://vllm.ai/events) to join us.
 
 ---
 
+> ### 🔬 This is `phi9t`'s research fork
+> A platform for exploring vLLM internals (not the upstream project). Fork-specific tooling:
+>
+> - **[vLLM Explorer](https://phi9t.github.io/vllm/)** — an interactive dark-glass SPA ([`explorer/`](explorer/), [README](explorer/README.md)) with three modes: **Data Exploration** (FineWeb-Edu format + Qwen3 tokenization), **Component Deep Dive** (the V1 engine, a companion to [`HACKERS_GUIDE.md`](HACKERS_GUIDE.md)), and **Model Architecture** (the inference forward pass as a residual-mainline circuit, switchable across Qwen3-0.6B/8B, Qwen3-30B-A3B MoE, and DeepSeek-V3 MLA, with a flow/shapes/compute/memory lens).
+> - [`HACKERS_GUIDE.md`](HACKERS_GUIDE.md) + [`hacks/`](hacks/) — runnable component-isolation experiments.
+>
+> Everything below is the upstream vLLM README.
+
 ## About
 
 vLLM is a fast and easy-to-use library for LLM inference and serving.
