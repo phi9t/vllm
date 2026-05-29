@@ -5,18 +5,10 @@ import { cn } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Slider } from '@/components/ui/slider'
 import { sourceUrl } from '@/lib/assets'
-import { ALL_BLOCKS, type Qwen3Block } from './qwen3Blocks'
-import Qwen3Circuit from './Qwen3Circuit'
-import {
-  computeMetrics,
-  fmtBytes,
-  fmtCount,
-  fmtFlops,
-  summarize,
-  type Qwen3Config,
-} from './blockMath'
+import { computeMetrics, fmtBytes, fmtCount, fmtFlops, summarize } from './blockTypes'
+import ModelCircuit, { type Lens } from './ModelCircuit'
+import type { Block, ModelArch, ModelIndexEntry } from './modelArch'
 
-type Lens = 'flow' | 'shapes' | 'compute' | 'memory'
 const LENSES: { id: Lens; label: string }[] = [
   { id: 'flow', label: 'Flow' },
   { id: 'shapes', label: 'Shapes' },
@@ -25,36 +17,78 @@ const LENSES: { id: Lens; label: string }[] = [
 ]
 
 export default function ArchitectureExplorer() {
-  const [cfg, setCfg] = useState<Qwen3Config | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [index, setIndex] = useState<ModelIndexEntry[] | null>(null)
+  const [indexError, setIndexError] = useState<string | null>(null)
+
+  const [slug, setSlug] = useState<string | null>(null)
+  const [manifest, setManifest] = useState<ModelArch | null>(null)
+  const [manifestError, setManifestError] = useState<string | null>(null)
+  const [manifestLoading, setManifestLoading] = useState(false)
+
   const [lens, setLens] = useState<Lens>('shapes')
   const [tokens, setTokens] = useState(512)
-  const [selectedId, setSelectedId] = useState<string>('attn')
+  const [selectedId, setSelectedId] = useState<string>('')
 
+  // Load the model index on mount
   useEffect(() => {
-    fetchExplorerJson<Qwen3Config>('qwen3_config.json')
-      .then(setCfg)
-      .catch((e) => setError(errorMessage(e)))
+    fetchExplorerJson<ModelIndexEntry[]>('models/index.json')
+      .then((entries) => {
+        setIndex(entries)
+        if (entries.length > 0) setSlug(entries[0].slug)
+      })
+      .catch((e) => setIndexError(errorMessage(e)))
   }, [])
 
-  const metrics = useMemo(() => (cfg ? computeMetrics(cfg, tokens) : null), [cfg, tokens])
-  const summary = useMemo(() => (cfg ? summarize(cfg, tokens) : null), [cfg, tokens])
+  // Load the selected model manifest when slug changes
+  useEffect(() => {
+    if (!slug) return
+    setManifest(null)
+    setManifestError(null)
+    setManifestLoading(true)
+    fetchExplorerJson<ModelArch>(`models/${slug}.json`)
+      .then((m) => {
+        setManifest(m)
+        setManifestLoading(false)
+        // Default selection: first block in first branch's first step (or first prelude)
+        const firstId =
+          m.layers[0]?.branches[0]?.steps[0]?.id ??
+          m.layers[0]?.branches[0]?.preNorm?.id ??
+          m.prelude[0]?.id ??
+          ''
+        setSelectedId(firstId)
+      })
+      .catch((e) => {
+        setManifestError(errorMessage(e))
+        setManifestLoading(false)
+      })
+  }, [slug])
 
-  if (error) {
+  const metrics = useMemo(
+    () => (manifest ? computeMetrics(manifest, tokens) : null),
+    [manifest, tokens],
+  )
+  const summary = useMemo(
+    () => (manifest ? summarize(manifest, tokens) : null),
+    [manifest, tokens],
+  )
+
+  if (indexError) {
     return (
       <div className="panel p-6 text-danger">
-        Failed to load qwen3_config.json: {error}
+        Failed to load models/index.json: {indexError}
         <p className="mt-2 text-sm text-ink-soft">
           Generate it first: <code className="code-ref">./scripts/workflow.sh gen-data</code>
         </p>
       </div>
     )
   }
-  if (!cfg || !metrics || !summary) {
-    return <div className="panel p-6 text-ink-soft">Loading Qwen3 config…</div>
+
+  if (!index) {
+    return <div className="panel p-6 text-ink-soft">Loading model index…</div>
   }
 
   const lensValue = (id: string): string => {
+    if (!metrics) return ''
     const m = metrics[id]
     if (!m) return ''
     switch (lens) {
@@ -69,27 +103,53 @@ export default function ArchitectureExplorer() {
     }
   }
 
-  const block = ALL_BLOCKS.find((b) => b.id === selectedId) ?? null
+  // Find the selected block across all block collections in the manifest
+  const findBlock = (m: ModelArch, id: string): Block | null => {
+    for (const b of m.prelude) if (b.id === id) return b
+    for (const group of m.layers) {
+      for (const branch of group.branches) {
+        if (branch.preNorm.id === id) return branch.preNorm
+        for (const step of branch.steps) if (step.id === id) return step
+      }
+    }
+    for (const b of m.head) if (b.id === id) return b
+    return null
+  }
+
+  const selectedBlock = manifest && selectedId ? findBlock(manifest, selectedId) : null
+
+  const modelLabel =
+    index.find((e) => e.slug === slug)?.label ?? slug ?? ''
 
   return (
-    // Diagram fills the entire left panel; config selectors + details on the right.
     <div className="grid items-start gap-5 lg:grid-cols-2">
       <Card className="flex flex-col">
         <CardHeader>
-          <CardTitle>Qwen3 decoder — inference forward pass</CardTitle>
+          <CardTitle>
+            {manifest ? manifest.model.split('/').pop() ?? manifest.model : modelLabel} — inference forward pass
+          </CardTitle>
           <p className="text-sm text-ink-soft">
-            Residual mainline, input ↑ output. One decoder layer (×{cfg.num_hidden_layers}); click
-            any block.
+            Residual mainline, input ↑ output.{manifest ? ` One decoder layer (×${manifest.config.num_hidden_layers});` : ''} click any block.
           </p>
         </CardHeader>
         <CardContent className="flex flex-1 justify-center">
-          <Qwen3Circuit
-            lens={lens}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            lensValue={lensValue}
-            layers={cfg.num_hidden_layers}
-          />
+          {manifestLoading && (
+            <div className="py-12 text-sm text-ink-soft">Loading {modelLabel}…</div>
+          )}
+          {manifestError && (
+            <div className="py-6 text-sm text-danger">
+              Failed to load {slug}.json: {manifestError}
+            </div>
+          )}
+          {manifest && metrics && (
+            <ModelCircuit
+              manifest={manifest}
+              lens={lens}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
+              lensValue={lensValue}
+            />
+          )}
         </CardContent>
       </Card>
 
@@ -97,7 +157,26 @@ export default function ArchitectureExplorer() {
         {/* Model config selectors + summary */}
         <Card>
           <CardContent className="flex flex-col gap-4 p-5">
+            {/* Model switcher */}
+            {index.length > 1 && (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-ink-muted">Model</span>
+                <select
+                  value={slug ?? ''}
+                  onChange={(e) => setSlug(e.target.value)}
+                  className="rounded-lg border border-panelborder bg-panel px-2 py-1.5 text-xs text-ink focus:outline-none focus:border-panelborder-active"
+                >
+                  {index.map((entry) => (
+                    <option key={entry.slug} value={entry.slug}>
+                      {entry.label} ({fmtCount(entry.totalParams)})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="flex flex-wrap items-center justify-between gap-4">
+              {/* Lens tabs */}
               <div className="flex flex-wrap gap-2" role="tablist" aria-label="Lens">
                 {LENSES.map(({ id, label }) => (
                   <button
@@ -116,6 +195,7 @@ export default function ArchitectureExplorer() {
                   </button>
                 ))}
               </div>
+              {/* Token slider */}
               <div className="flex items-center gap-3 text-xs text-ink-soft">
                 <span className="whitespace-nowrap">
                   tokens <span className="font-mono text-cyan">{tokens}</span>
@@ -131,22 +211,31 @@ export default function ArchitectureExplorer() {
                 </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Stat label="model" value={cfg.model.split('/').pop() ?? cfg.model} mono />
-              <Stat label="params" value={fmtCount(summary.totalParams)} />
-              <Stat label={`KV cache @ ${tokens}`} value={fmtBytes(summary.kvBytesTotal)} />
-              <Stat label={`forward FLOPs @ ${tokens}`} value={fmtFlops(summary.totalFlops)} />
-            </div>
-            <p className="text-xs text-ink-muted">
-              {cfg.num_hidden_layers} layers · d={cfg.hidden_size} · heads={cfg.num_attention_heads}/
-              {cfg.num_key_value_heads} (GQA {cfg.num_attention_heads / cfg.num_key_value_heads}×) ·
-              head_dim={cfg.head_dim} · config source <code className="code-ref">{cfg.source}</code>
-            </p>
+
+            {manifest && summary ? (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <Stat label="params" value={fmtCount(summary.totalParams)} />
+                  <Stat label="active params/token" value={fmtCount(summary.activeParams)} />
+                  <Stat label={`KV cache @ ${tokens}`} value={fmtBytes(summary.kvBytesTotal)} />
+                  <Stat label={`forward FLOPs @ ${tokens}`} value={fmtFlops(summary.totalFlops)} />
+                </div>
+                <p className="text-xs text-ink-muted">
+                  {manifest.config.num_hidden_layers} layers · d={manifest.config.hidden_size} ·
+                  heads={manifest.config.num_attention_heads}/{manifest.config.num_key_value_heads}
+                  {' '}(GQA {manifest.config.num_attention_heads / manifest.config.num_key_value_heads}×) ·
+                  head_dim={manifest.config.head_dim} · source{' '}
+                  <code className="code-ref">{manifest.source}</code>
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-ink-muted">—</p>
+            )}
           </CardContent>
         </Card>
 
         <BlockDrawer
-          block={block}
+          block={selectedBlock}
           metricLine={selectedId ? lensValue(selectedId) : ''}
           lens={lens}
         />
@@ -161,7 +250,7 @@ function BlockDrawer({
   metricLine,
   lens,
 }: {
-  block: Qwen3Block | null
+  block: Block | null
   metricLine: string
   lens: Lens
 }) {
@@ -188,9 +277,9 @@ function BlockDrawer({
         <code className="code-ref">{block.symbol}</code>
       </div>
       <p className="text-sm leading-relaxed text-ink-soft">{block.desc}</p>
-      {block.qwen3Note && (
+      {block.note && (
         <p className="rounded-lg border border-cyan/30 bg-cyan/5 px-3 py-2 text-xs text-cyan">
-          {block.qwen3Note}
+          {block.note}
         </p>
       )}
       {lens !== 'flow' && metricLine && (

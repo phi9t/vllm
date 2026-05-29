@@ -1,0 +1,183 @@
+{
+  "model": "Qwen/Qwen3-8B",
+  "slug": "qwen3-8b",
+  "family": "dense-qknorm",
+  "source": "transformers",
+  "config": {
+    "hidden_size": 4096,
+    "num_hidden_layers": 36,
+    "num_attention_heads": 32,
+    "num_key_value_heads": 8,
+    "head_dim": 128,
+    "intermediate_size": 12288,
+    "vocab_size": 151936,
+    "tie_word_embeddings": false,
+    "torch_dtype": "bfloat16",
+    "rope_theta": 1000000
+  },
+  "prelude": [
+    {
+      "id": "embed",
+      "type": "embed",
+      "label": "Token embeddings",
+      "symbol": "VocabParallelEmbedding (embed_tokens)",
+      "ref": "vllm/model_executor/models/qwen2.py:358",
+      "kind": "embed",
+      "desc": "input_ids \u2192 hidden_states. Looks up a row of the embedding matrix per token.",
+      "note": "tie_word_embeddings reuses this matrix as the lm_head."
+    }
+  ],
+  "layers": [
+    {
+      "repeat": 36,
+      "label": "decoder layer",
+      "branches": [
+        {
+          "name": "attn",
+          "accent": "#10b981",
+          "preNorm": {
+            "id": "input_norm",
+            "type": "rmsnorm",
+            "label": "Input RMSNorm",
+            "symbol": "RMSNorm (input_layernorm)",
+            "ref": "vllm/model_executor/models/qwen3.py:211",
+            "kind": "norm",
+            "desc": "Pre-attention normalization, fused with the residual add on all but the first layer."
+          },
+          "steps": [
+            {
+              "id": "qkv_proj",
+              "type": "qkv_linear",
+              "label": "QKV projection",
+              "symbol": "QKVParallelLinear (qkv_proj)",
+              "ref": "vllm/model_executor/models/qwen3.py:98",
+              "kind": "proj",
+              "desc": "One fused linear producing Q, K, V. Split into q_dim + 2\u00b7kv_dim (GQA)."
+            },
+            {
+              "id": "q_norm",
+              "type": "qk_norm",
+              "label": "Q head-norm",
+              "symbol": "RMSNorm (q_norm, head_dim)",
+              "ref": "vllm/model_executor/models/qwen3.py:142",
+              "kind": "norm",
+              "desc": "Per-head RMSNorm over head_dim applied to queries before RoPE.",
+              "note": "Qwen3-specific: QK-Norm stabilizes attention logits."
+            },
+            {
+              "id": "k_norm",
+              "type": "qk_norm",
+              "label": "K head-norm",
+              "symbol": "RMSNorm (k_norm, head_dim)",
+              "ref": "vllm/model_executor/models/qwen3.py:143",
+              "kind": "norm",
+              "desc": "Per-head RMSNorm over head_dim applied to keys before RoPE.",
+              "note": "Qwen3-specific: paired with q_norm."
+            },
+            {
+              "id": "rope",
+              "type": "rope",
+              "label": "RoPE (Q, K)",
+              "symbol": "RotaryEmbedding (get_rope)",
+              "ref": "vllm/model_executor/layers/rotary_embedding/__init__.py:33",
+              "kind": "rope",
+              "desc": "Rotary position embedding rotates Q and K by position. Uses a cached cos/sin table.",
+              "note": "rope_theta = 1e6 for long context."
+            },
+            {
+              "id": "attn",
+              "type": "attention_gqa",
+              "label": "Attention (paged KV)",
+              "symbol": "Attention.forward",
+              "ref": "vllm/model_executor/layers/attention/attention.py:409",
+              "kind": "attn",
+              "desc": "Scaled dot-product attention over the paged KV cache; backend chosen at init. GQA: kv_heads < heads.",
+              "note": "KV cache lives inside this layer (block tables, slot mapping)."
+            },
+            {
+              "id": "o_proj",
+              "type": "o_proj",
+              "label": "Output projection",
+              "symbol": "RowParallelLinear (o_proj)",
+              "ref": "vllm/model_executor/models/qwen3.py:107",
+              "kind": "proj",
+              "desc": "Projects the attention output (q_dim) back to hidden_size."
+            }
+          ]
+        },
+        {
+          "name": "mlp",
+          "accent": "#6366f1",
+          "preNorm": {
+            "id": "post_norm",
+            "type": "rmsnorm",
+            "label": "Post-attn RMSNorm",
+            "symbol": "RMSNorm (post_attention_layernorm)",
+            "ref": "vllm/model_executor/models/qwen3.py:212",
+            "kind": "norm",
+            "desc": "Pre-MLP normalization, fused with the residual add."
+          },
+          "steps": [
+            {
+              "id": "gate_up",
+              "type": "gate_up",
+              "label": "Gate+Up projection",
+              "symbol": "MergedColumnParallelLinear (gate_up_proj)",
+              "ref": "vllm/model_executor/models/qwen2.py:93",
+              "kind": "mlp",
+              "desc": "Fused gate and up projection: hidden_size \u2192 2\u00b7intermediate_size."
+            },
+            {
+              "id": "silu",
+              "type": "activation",
+              "label": "SiLU + gating",
+              "symbol": "SiluAndMul",
+              "ref": "vllm/model_executor/layers/activation.py:118",
+              "kind": "act",
+              "desc": "SwiGLU activation: silu(gate) \u00b7 up \u2192 intermediate_size."
+            },
+            {
+              "id": "down",
+              "type": "down",
+              "label": "Down projection",
+              "symbol": "RowParallelLinear (down_proj)",
+              "ref": "vllm/model_executor/models/qwen2.py:100",
+              "kind": "mlp",
+              "desc": "Projects intermediate_size back to hidden_size."
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "head": [
+    {
+      "id": "final_norm",
+      "type": "rmsnorm",
+      "label": "Final RMSNorm",
+      "symbol": "RMSNorm (norm)",
+      "ref": "vllm/model_executor/models/qwen2.py:382",
+      "kind": "norm",
+      "desc": "Normalizes the final hidden state before the LM head."
+    },
+    {
+      "id": "lm_head",
+      "type": "lm_head",
+      "label": "LM head",
+      "symbol": "ParallelLMHead",
+      "ref": "vllm/model_executor/models/qwen3.py:298",
+      "kind": "head",
+      "desc": "Projects hidden_size \u2192 vocab_size to produce logits.",
+      "note": "Weight tied to embed_tokens when tie_word_embeddings is set."
+    },
+    {
+      "id": "logits",
+      "type": "logits",
+      "label": "Logits processor",
+      "symbol": "LogitsProcessor",
+      "ref": "vllm/model_executor/models/qwen3.py:307",
+      "kind": "head",
+      "desc": "Gathers logits for the sampled positions; hands off to the Sampler."
+    }
+  ]
+}

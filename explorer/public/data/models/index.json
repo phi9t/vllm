@@ -1,0 +1,14 @@
+[
+  {
+    "slug": "qwen3-0_6b",
+    "label": "Qwen3-0.6B",
+    "family": "dense-qknorm",
+    "totalParams": 596049920
+  },
+  {
+    "slug": "qwen3-8b",
+    "label": "Qwen3-8B",
+    "family": "dense-qknorm",
+    "totalParams": 8190735360
+  }
+]

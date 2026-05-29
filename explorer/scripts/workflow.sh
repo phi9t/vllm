@@ -63,9 +63,9 @@ gen_data() {
   "${VENV_PY}" "${SCRIPT_DIR}/build_fineweb_sample.py" \
       --rows "${FINEWEB_ROWS:-200}" --out-dir "${DATA_DIR}"
 
-  log "Generating Qwen3 config snapshot ..."
-  "${VENV_PY}" "${SCRIPT_DIR}/build_qwen3_config.py" \
-      --model "${QWEN3_MODEL:-Qwen/Qwen3-0.6B}" --out "${DATA_DIR}/qwen3_config.json"
+  log "Generating model architecture manifests (all models + index) ..."
+  "${VENV_PY}" "${SCRIPT_DIR}/build_model_arch.py" \
+      --repo-root "${REPO_ROOT}" --out-dir "${DATA_DIR}/models"
 
   log "Data written to ${DATA_DIR}"
 }
