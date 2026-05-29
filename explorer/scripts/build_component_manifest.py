@@ -221,9 +221,20 @@ def main() -> None:
     out = (repo_root / args.out) if not Path(args.out).is_absolute() else Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+    # graphs/index.json — the switchable-subject index for Component mode.
+    # `manifest` is relative to public/data/ (where the file above lives).
+    graphs_dir = out.parent / "graphs"
+    graphs_dir.mkdir(parents=True, exist_ok=True)
+    (graphs_dir / "index.json").write_text(
+        json.dumps([{"slug": "v1-engine", "label": "V1 engine", "manifest": out.name}], indent=2)
+        + "\n",
+        encoding="utf-8",
+    )
+
     print(
         f"wrote {out} : {len(nodes)} core nodes, {len(edges)} edges, "
-        f"{len(sections)} sections, {len(hacks)} hacks"
+        f"{len(sections)} sections, {len(hacks)} hacks; graphs/index.json"
     )
 
 

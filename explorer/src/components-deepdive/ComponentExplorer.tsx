@@ -3,6 +3,7 @@ import { fetchExplorerJson, errorMessage } from '@/lib/fetch'
 import { cn } from '@/lib/utils'
 import { AsyncBoundary } from '@/explorer-kit/AsyncBoundary'
 import { ViewTabs } from '@/explorer-kit/ViewTabs'
+import { SubjectSwitcher } from '@/explorer-kit/SubjectSwitcher'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import ArchitectureGraph from './ArchitectureGraph'
 import ComponentDrawer from './ComponentDrawer'
@@ -14,6 +15,13 @@ import type {
   SectionNode,
 } from './types'
 
+/** One switchable subsystem graph; `manifest` is relative to public/data/. */
+interface GraphEntry {
+  slug: string
+  label: string
+  manifest: string
+}
+
 type Page = 'flow' | 'subsystems'
 
 export default function ComponentExplorer({
@@ -21,16 +29,37 @@ export default function ComponentExplorer({
 }: {
   onOpenArchitecture: () => void
 }) {
+  const [index, setIndex] = useState<GraphEntry[] | null>(null)
+  const [indexError, setIndexError] = useState<string | null>(null)
+  const [slug, setSlug] = useState<string | null>(null)
+
   const [manifest, setManifest] = useState<ComponentManifest | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<DrawerDetail | null>(null)
   const [page, setPage] = useState<Page>('flow')
 
+  // Load the subsystem-graph index on mount.
   useEffect(() => {
-    fetchExplorerJson<ComponentManifest>('components.json')
+    fetchExplorerJson<GraphEntry[]>('graphs/index.json')
+      .then((idx) => {
+        setIndex(idx)
+        setSlug(idx[0]?.slug ?? null)
+      })
+      .catch((e) => setIndexError(errorMessage(e)))
+  }, [])
+
+  const entry = index && slug ? index.find((g) => g.slug === slug) ?? null : null
+
+  // Load the active graph's manifest when the selection changes.
+  useEffect(() => {
+    if (!entry) return
+    setManifest(null)
+    setError(null)
+    setSelected(null)
+    fetchExplorerJson<ComponentManifest>(entry.manifest)
       .then(setManifest)
       .catch((e) => setError(errorMessage(e)))
-  }, [])
+  }, [entry])
 
   // Map a file -> the guide section that documents it (for attaching hacks).
   const sectionByFile = useMemo(() => {
@@ -73,13 +102,24 @@ export default function ComponentExplorer({
     }
   }
 
+  if (!index) {
+    return (
+      <AsyncBoundary
+        loading={indexError === null}
+        error={indexError}
+        loadingLabel="Loading subsystem index…"
+        errorPrefix="Failed to load graphs/index.json"
+      />
+    )
+  }
+
   if (!manifest) {
     return (
       <AsyncBoundary
         loading={error === null}
         error={error}
         loadingLabel="Loading component manifest…"
-        errorPrefix="Failed to load components.json"
+        errorPrefix="Failed to load component manifest"
       />
     )
   }
@@ -91,16 +131,27 @@ export default function ComponentExplorer({
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Pager — flow on one page, every subsystem on the next */}
-      <ViewTabs
-        ariaLabel="Component view"
-        value={page}
-        onChange={setPage}
-        options={[
-          { value: 'flow', label: 'Request flow' },
-          { value: 'subsystems', label: `All subsystems (${manifest.sections.length})` },
-        ]}
-      />
+      {/* Subsystem-graph switcher + pager (flow vs every subsystem) */}
+      <div className="flex flex-wrap items-center gap-3">
+        {index.length > 1 && (
+          <SubjectSwitcher
+            label="Subsystem map"
+            ariaLabel="Subsystem map"
+            value={slug ?? ''}
+            options={index.map((g) => ({ value: g.slug, label: g.label }))}
+            onChange={setSlug}
+          />
+        )}
+        <ViewTabs
+          ariaLabel="Component view"
+          value={page}
+          onChange={setPage}
+          options={[
+            { value: 'flow', label: 'Request flow' },
+            { value: 'subsystems', label: `All subsystems (${manifest.sections.length})` },
+          ]}
+        />
+      </div>
 
       {page === 'flow' ? (
         // Diagram fills the entire left half; detail sits at the top of the right half.
