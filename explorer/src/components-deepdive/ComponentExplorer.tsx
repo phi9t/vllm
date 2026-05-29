@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { fetchExplorerJson, errorMessage } from '@/lib/fetch'
 import { cn } from '@/lib/utils'
 import { AsyncBoundary } from '@/explorer-kit/AsyncBoundary'
+import { ViewTabs } from '@/explorer-kit/ViewTabs'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import ArchitectureGraph from './ArchitectureGraph'
 import ComponentDrawer from './ComponentDrawer'
@@ -91,14 +92,15 @@ export default function ComponentExplorer({
   return (
     <div className="flex flex-col gap-5">
       {/* Pager — flow on one page, every subsystem on the next */}
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Component view">
-        <PagerTab active={page === 'flow'} onClick={() => setPage('flow')}>
-          Request flow
-        </PagerTab>
-        <PagerTab active={page === 'subsystems'} onClick={() => setPage('subsystems')}>
-          All subsystems ({manifest.sections.length})
-        </PagerTab>
-      </div>
+      <ViewTabs
+        ariaLabel="Component view"
+        value={page}
+        onChange={setPage}
+        options={[
+          { value: 'flow', label: 'Request flow' },
+          { value: 'subsystems', label: `All subsystems (${manifest.sections.length})` },
+        ]}
+      />
 
       {page === 'flow' ? (
         // Diagram fills the entire left half; detail sits at the top of the right half.
@@ -169,28 +171,3 @@ export default function ComponentExplorer({
   )
 }
 
-function PagerTab({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean
-  onClick: () => void
-  children: ReactNode
-}) {
-  return (
-    <button
-      role="tab"
-      aria-selected={active}
-      onClick={onClick}
-      className={cn(
-        'rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors',
-        active
-          ? 'border-panelborder-active bg-panel-hover text-ink'
-          : 'border-panelborder bg-panel text-ink-soft hover:text-ink',
-      )}
-    >
-      {children}
-    </button>
-  )
-}

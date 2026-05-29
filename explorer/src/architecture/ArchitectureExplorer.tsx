@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ExternalLink } from 'lucide-react'
 import { fetchExplorerJson, errorMessage } from '@/lib/fetch'
 import { cn } from '@/lib/utils'
 import { AsyncBoundary } from '@/explorer-kit/AsyncBoundary'
 import { SubjectSwitcher } from '@/explorer-kit/SubjectSwitcher'
+import { ViewTabs } from '@/explorer-kit/ViewTabs'
+import { DetailDrawer } from '@/explorer-kit/DetailDrawer'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Slider } from '@/components/ui/slider'
-import { sourceUrl } from '@/lib/assets'
 import { computeMetrics, fmtBytes, fmtCount, fmtFlops, lensMetric, summarize, type Lens } from './blockTypes'
 import ModelCircuit from './ModelCircuit'
 import type { Block, ModelArch, ModelIndexEntry } from './modelArch'
@@ -158,24 +158,12 @@ export default function ArchitectureExplorer() {
 
             <div className="flex flex-wrap items-center justify-between gap-4">
               {/* Lens tabs */}
-              <div className="flex flex-wrap gap-2" role="tablist" aria-label="Lens">
-                {LENSES.map(({ id, label }) => (
-                  <button
-                    key={id}
-                    role="tab"
-                    aria-selected={lens === id}
-                    className={cn(
-                      'rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors',
-                      lens === id
-                        ? 'border-panelborder-active bg-panel-hover text-ink'
-                        : 'border-panelborder bg-panel text-ink-soft hover:text-ink',
-                    )}
-                    onClick={() => setLens(id)}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+              <ViewTabs
+                ariaLabel="Lens"
+                value={lens}
+                onChange={setLens}
+                options={LENSES.map((l) => ({ value: l.id, label: l.label }))}
+              />
               {/* Token slider */}
               <div className="flex items-center gap-3 text-xs text-ink-soft">
                 <span className="whitespace-nowrap">
@@ -235,41 +223,35 @@ function BlockDrawer({
   metricLine: string
   lens: Lens
 }) {
-  if (!block) {
-    return <Card className="drawer text-sm text-ink-muted">Select a block to inspect it.</Card>
-  }
   return (
-    <Card className="drawer">
-      <div>
-        <div className="text-[11px] uppercase tracking-wide text-ink-muted">{block.kind}</div>
-        <h3 className="mt-1 text-lg font-bold text-ink">{block.label}</h3>
-      </div>
-      <a
-        href={sourceUrl(block.ref)}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="inline-flex items-center gap-1.5 text-sm text-cyan hover:underline"
-      >
-        <code className="code-ref">{block.ref}</code>
-        <ExternalLink size={13} aria-hidden="true" />
-      </a>
-      <div className="text-sm">
-        <span className="text-ink-muted">symbol </span>
-        <code className="code-ref">{block.symbol}</code>
-      </div>
-      <p className="text-sm leading-relaxed text-ink-soft">{block.desc}</p>
-      {block.note && (
-        <p className="rounded-lg border border-cyan/30 bg-cyan/5 px-3 py-2 text-xs text-cyan">
-          {block.note}
-        </p>
+    <DetailDrawer
+      empty={!block}
+      emptyText="Select a block to inspect it."
+      eyebrow={block?.kind}
+      title={block?.label}
+      sourceRef={block?.ref ?? null}
+    >
+      {block && (
+        <>
+          <div className="text-sm">
+            <span className="text-ink-muted">symbol </span>
+            <code className="code-ref">{block.symbol}</code>
+          </div>
+          <p className="text-sm leading-relaxed text-ink-soft">{block.desc}</p>
+          {block.note && (
+            <p className="rounded-lg border border-cyan/30 bg-cyan/5 px-3 py-2 text-xs text-cyan">
+              {block.note}
+            </p>
+          )}
+          {lens !== 'flow' && metricLine && (
+            <div className="rounded-lg border border-panelborder bg-panel px-3 py-2">
+              <div className="text-[11px] uppercase tracking-wide text-ink-muted">{lens}</div>
+              <div className="font-mono text-sm text-ink">{metricLine}</div>
+            </div>
+          )}
+        </>
       )}
-      {lens !== 'flow' && metricLine && (
-        <div className="rounded-lg border border-panelborder bg-panel px-3 py-2">
-          <div className="text-[11px] uppercase tracking-wide text-ink-muted">{lens}</div>
-          <div className="font-mono text-sm text-ink">{metricLine}</div>
-        </div>
-      )}
-    </Card>
+    </DetailDrawer>
   )
 }
 

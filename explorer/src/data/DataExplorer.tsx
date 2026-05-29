@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchExplorerJson, errorMessage } from '@/lib/fetch'
-import { cn } from '@/lib/utils'
 import { AsyncBoundary } from '@/explorer-kit/AsyncBoundary'
+import { ViewTabs } from '@/explorer-kit/ViewTabs'
 import type { FinewebSample, FinewebSchema, Tokenization } from './types'
 import SchemaView from './SchemaView'
 import SampleBrowser from './SampleBrowser'
@@ -50,24 +50,12 @@ export default function DataExplorer() {
       {ready && (
         <div className="flex flex-col gap-5">
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex flex-wrap gap-2" role="tablist" aria-label="Data views">
-              {TABS.map(({ id, label }) => (
-                <button
-                  key={id}
-                  role="tab"
-                  aria-selected={tab === id}
-                  className={cn(
-                    'rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors',
-                    tab === id
-                      ? 'border-panelborder-active bg-panel-hover text-ink'
-                      : 'border-panelborder bg-panel text-ink-soft hover:text-ink',
-                  )}
-                  onClick={() => setTab(id)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <ViewTabs
+              ariaLabel="Data views"
+              value={tab}
+              onChange={setTab}
+              options={TABS.map((t) => ({ value: t.id, label: t.label }))}
+            />
             <span className="text-xs text-ink-muted">
               {sample.count} rows · source <code className="code-ref">{sample.source}</code>
             </span>
