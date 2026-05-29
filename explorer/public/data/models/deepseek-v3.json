@@ -1,0 +1,367 @@
+{
+  "model": "deepseek-ai/DeepSeek-V3",
+  "slug": "deepseek-v3",
+  "family": "mla-moe",
+  "source": "transformers",
+  "config": {
+    "hidden_size": 7168,
+    "num_hidden_layers": 61,
+    "num_attention_heads": 128,
+    "num_key_value_heads": 128,
+    "head_dim": 192,
+    "intermediate_size": 18432,
+    "vocab_size": 129280,
+    "tie_word_embeddings": false,
+    "torch_dtype": "bfloat16",
+    "rope_theta": 10000,
+    "num_experts": 256,
+    "num_experts_per_tok": 8,
+    "moe_intermediate_size": 2048,
+    "num_shared_experts": 1,
+    "q_lora_rank": 1536,
+    "kv_lora_rank": 512,
+    "qk_nope_head_dim": 128,
+    "qk_rope_head_dim": 64,
+    "v_head_dim": 128,
+    "first_k_dense_replace": 3
+  },
+  "prelude": [
+    {
+      "id": "embed",
+      "type": "embed",
+      "label": "Token embeddings",
+      "symbol": "VocabParallelEmbedding (embed_tokens)",
+      "ref": "vllm/model_executor/models/deepseek_v2.py:1230",
+      "kind": "embed",
+      "desc": "input_ids \u2192 hidden_states. Looks up a row of the embedding matrix per token.",
+      "note": "tie_word_embeddings=False for DeepSeek-V3."
+    }
+  ],
+  "layers": [
+    {
+      "repeat": 3,
+      "label": "dense layer \u00d7 first 3",
+      "branches": [
+        {
+          "name": "attn",
+          "accent": "#10b981",
+          "preNorm": {
+            "id": "input_norm",
+            "type": "rmsnorm",
+            "label": "Input RMSNorm",
+            "symbol": "RMSNorm (input_layernorm)",
+            "ref": "vllm/model_executor/models/deepseek_v2.py:1148",
+            "kind": "norm",
+            "desc": "Pre-attention normalization over hidden_size."
+          },
+          "steps": [
+            {
+              "id": "q_a",
+              "type": "q_a_linear",
+              "label": "Q latent projection (A)",
+              "symbol": "ReplicatedLinear (q_a_proj)",
+              "ref": "vllm/model_executor/models/deepseek_v2.py:448",
+              "kind": "latent",
+              "desc": "Projects hidden_size \u2192 q_lora_rank (low-rank latent for queries)."
+            },
+            {
+              "id": "q_a_norm",
+              "type": "mla_q_norm",
+              "label": "Q latent RMSNorm",
+              "symbol": "RMSNorm (q_a_layernorm, q_lora_rank)",
+              "ref": "vllm/model_executor/models/deepseek_v2.py:455",
+              "kind": "norm",
+              "desc": "RMSNorm over q_lora_rank before decompression."
+            },
+            {
+              "id": "q_b",
+              "type": "q_b_linear",
+              "label": "Q decompression projection (B)",
+              "symbol": "ColumnParallelLinear (q_b_proj)",
+              "ref": "vllm/model_executor/models/deepseek_v2.py:456",
+              "kind": "latent",
+              "desc": "Decompresses q_lora_rank \u2192 H\u00b7(qk_nope_head_dim + qk_rope_head_dim)."
+            },
+            {
+              "id": "kv_a",
+              "type": "kv_a_linear",
+              "label": "KV latent projection (A)",
+              "symbol": "ReplicatedLinear (kv_a_proj_with_mqa)",
+              "ref": "vllm/model_executor/models/deepseek_v2.py:472",
+              "kind": "latent",
+              "desc": "Projects hidden_size \u2192 kv_lora_rank + qk_rope_head_dim (latent + decoupled RoPE key)."
+            },
+            {
+              "id": "kv_a_norm",
+              "type": "mla_kv_norm",
+              "label": "KV latent RMSNorm",
+              "symbol": "RMSNorm (kv_a_layernorm, kv_lora_rank)",
+              "ref": "vllm/model_executor/models/deepseek_v2.py:479",
+              "kind": "norm",
+              "desc": "RMSNorm over kv_lora_rank before decompression."
+            },
+            {
+              "id": "kv_b",
+              "type": "kv_b_linear",
+              "label": "KV decompression projection (B)",
+              "symbol": "ColumnParallelLinear (kv_b_proj)",
+              "ref": "vllm/model_executor/models/deepseek_v2.py:480",
+              "kind": "latent",
+              "desc": "Decompresses kv_lora_rank \u2192 H\u00b7(qk_nope_head_dim + v_head_dim)."
+            },
+            {
+              "id": "rope",
+              "type": "rope",
+              "label": "RoPE (Q, K)",
+              "symbol": "RotaryEmbedding (get_rope)",
+              "ref": "vllm/model_executor/layers/rotary_embedding/__init__.py:33",
+              "kind": "rope",
+              "desc": "Rotary position embedding on decoupled RoPE portions of Q and K.",
+              "note": "rope_theta=10000 for DeepSeek-V3."
+            },
+            {
+              "id": "attn",
+              "type": "attention_mla",
+              "label": "MLA Attention (paged KV)",
+              "symbol": "Attention.forward",
+              "ref": "vllm/model_executor/layers/attention/attention.py:409",
+              "kind": "attn",
+              "desc": "Scaled dot-product attention with compressed KV cache. KV cache stores latent (kv_lora_rank+qk_rope_head_dim) per token.",
+              "note": "KV cache is (kvl+qr)\u00b7bytes per token \u2014 far smaller than GQA."
+            },
+            {
+              "id": "o_proj",
+              "type": "mla_o_proj",
+              "label": "Output projection",
+              "symbol": "RowParallelLinear (o_proj)",
+              "ref": "vllm/model_executor/models/deepseek_v2.py:163",
+              "kind": "proj",
+              "desc": "Projects H\u00b7v_head_dim \u2192 hidden_size."
+            }
+          ]
+        },
+        {
+          "name": "mlp",
+          "accent": "#6366f1",
+          "preNorm": {
+            "id": "post_norm",
+            "type": "rmsnorm",
+            "label": "Post-attn RMSNorm",
+            "symbol": "RMSNorm (post_attention_layernorm)",
+            "ref": "vllm/model_executor/models/deepseek_v2.py:1149",
+            "kind": "norm",
+            "desc": "Pre-MLP normalization."
+          },
+          "steps": [
+            {
+              "id": "gate_up",
+              "type": "gate_up",
+              "label": "Gate+Up projection",
+              "symbol": "MergedColumnParallelLinear (gate_up_proj)",
+              "ref": "vllm/model_executor/models/deepseek_v2.py:215",
+              "kind": "mlp",
+              "desc": "Fused gate and up projection: hidden_size \u2192 2\u00b7intermediate_size."
+            },
+            {
+              "id": "silu",
+              "type": "activation",
+              "label": "SiLU + gating",
+              "symbol": "SiluAndMul",
+              "ref": "vllm/model_executor/layers/activation.py:118",
+              "kind": "act",
+              "desc": "SwiGLU activation: silu(gate) \u00b7 up \u2192 intermediate_size."
+            },
+            {
+              "id": "down",
+              "type": "down",
+              "label": "Down projection",
+              "symbol": "RowParallelLinear (down_proj)",
+              "ref": "vllm/model_executor/models/deepseek_v2.py:223",
+              "kind": "mlp",
+              "desc": "Projects intermediate_size back to hidden_size."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "repeat": 58,
+      "label": "MoE layer \u00d7 58",
+      "branches": [
+        {
+          "name": "attn",
+          "accent": "#10b981",
+          "preNorm": {
+            "id": "input_norm",
+            "type": "rmsnorm",
+            "label": "Input RMSNorm",
+            "symbol": "RMSNorm (input_layernorm)",
+            "ref": "vllm/model_executor/models/deepseek_v2.py:1148",
+            "kind": "norm",
+            "desc": "Pre-attention normalization over hidden_size."
+          },
+          "steps": [
+            {
+              "id": "q_a",
+              "type": "q_a_linear",
+              "label": "Q latent projection (A)",
+              "symbol": "ReplicatedLinear (q_a_proj)",
+              "ref": "vllm/model_executor/models/deepseek_v2.py:448",
+              "kind": "latent",
+              "desc": "Projects hidden_size \u2192 q_lora_rank (low-rank latent for queries)."
+            },
+            {
+              "id": "q_a_norm",
+              "type": "mla_q_norm",
+              "label": "Q latent RMSNorm",
+              "symbol": "RMSNorm (q_a_layernorm, q_lora_rank)",
+              "ref": "vllm/model_executor/models/deepseek_v2.py:455",
+              "kind": "norm",
+              "desc": "RMSNorm over q_lora_rank before decompression."
+            },
+            {
+              "id": "q_b",
+              "type": "q_b_linear",
+              "label": "Q decompression projection (B)",
+              "symbol": "ColumnParallelLinear (q_b_proj)",
+              "ref": "vllm/model_executor/models/deepseek_v2.py:456",
+              "kind": "latent",
+              "desc": "Decompresses q_lora_rank \u2192 H\u00b7(qk_nope_head_dim + qk_rope_head_dim)."
+            },
+            {
+              "id": "kv_a",
+              "type": "kv_a_linear",
+              "label": "KV latent projection (A)",
+              "symbol": "ReplicatedLinear (kv_a_proj_with_mqa)",
+              "ref": "vllm/model_executor/models/deepseek_v2.py:472",
+              "kind": "latent",
+              "desc": "Projects hidden_size \u2192 kv_lora_rank + qk_rope_head_dim (latent + decoupled RoPE key)."
+            },
+            {
+              "id": "kv_a_norm",
+              "type": "mla_kv_norm",
+              "label": "KV latent RMSNorm",
+              "symbol": "RMSNorm (kv_a_layernorm, kv_lora_rank)",
+              "ref": "vllm/model_executor/models/deepseek_v2.py:479",
+              "kind": "norm",
+              "desc": "RMSNorm over kv_lora_rank before decompression."
+            },
+            {
+              "id": "kv_b",
+              "type": "kv_b_linear",
+              "label": "KV decompression projection (B)",
+              "symbol": "ColumnParallelLinear (kv_b_proj)",
+              "ref": "vllm/model_executor/models/deepseek_v2.py:480",
+              "kind": "latent",
+              "desc": "Decompresses kv_lora_rank \u2192 H\u00b7(qk_nope_head_dim + v_head_dim)."
+            },
+            {
+              "id": "rope",
+              "type": "rope",
+              "label": "RoPE (Q, K)",
+              "symbol": "RotaryEmbedding (get_rope)",
+              "ref": "vllm/model_executor/layers/rotary_embedding/__init__.py:33",
+              "kind": "rope",
+              "desc": "Rotary position embedding on decoupled RoPE portions of Q and K.",
+              "note": "rope_theta=10000 for DeepSeek-V3."
+            },
+            {
+              "id": "attn",
+              "type": "attention_mla",
+              "label": "MLA Attention (paged KV)",
+              "symbol": "Attention.forward",
+              "ref": "vllm/model_executor/layers/attention/attention.py:409",
+              "kind": "attn",
+              "desc": "Scaled dot-product attention with compressed KV cache. KV cache stores latent (kv_lora_rank+qk_rope_head_dim) per token.",
+              "note": "KV cache is (kvl+qr)\u00b7bytes per token \u2014 far smaller than GQA."
+            },
+            {
+              "id": "o_proj",
+              "type": "mla_o_proj",
+              "label": "Output projection",
+              "symbol": "RowParallelLinear (o_proj)",
+              "ref": "vllm/model_executor/models/deepseek_v2.py:163",
+              "kind": "proj",
+              "desc": "Projects H\u00b7v_head_dim \u2192 hidden_size."
+            }
+          ]
+        },
+        {
+          "name": "moe",
+          "accent": "#f472b6",
+          "preNorm": {
+            "id": "post_norm",
+            "type": "rmsnorm",
+            "label": "Post-attn RMSNorm",
+            "symbol": "RMSNorm (post_attention_layernorm)",
+            "ref": "vllm/model_executor/models/deepseek_v2.py:1149",
+            "kind": "norm",
+            "desc": "Pre-MoE normalization."
+          },
+          "steps": [
+            {
+              "id": "router",
+              "type": "moe_router",
+              "label": "MoE router (gate)",
+              "symbol": "GateLinear (gate)",
+              "ref": "vllm/model_executor/models/deepseek_v2.py:273",
+              "kind": "router",
+              "desc": "Top-k gating: projects hidden_size \u2192 num_experts; selects top-8 experts per token.",
+              "note": "norm_topk_prob=True: renormalizes top-k softmax scores."
+            },
+            {
+              "id": "experts",
+              "type": "moe_experts",
+              "label": "Sparse expert FFNs",
+              "symbol": "FusedMoE (experts)",
+              "ref": "vllm/model_executor/models/deepseek_v2.py:327",
+              "kind": "moe",
+              "desc": "256 independent SwiGLU FFNs (moe_intermediate_size=2048); only top-8 run per token.",
+              "note": "Total params: E\u00d73\u00d7d\u00d7I across all experts; active params: k\u00d73\u00d7d\u00d7I per token."
+            },
+            {
+              "id": "shared_expert",
+              "type": "shared_expert",
+              "label": "Shared expert FFN",
+              "symbol": "DeepseekV2MLP (shared_experts)",
+              "ref": "vllm/model_executor/models/deepseek_v2.py:317",
+              "kind": "moe",
+              "desc": "Always-active shared expert (1\u00d7moe_intermediate_size). Runs for every token.",
+              "note": "Unlike routed experts, shared_experts always contributes to every token."
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "head": [
+    {
+      "id": "final_norm",
+      "type": "rmsnorm",
+      "label": "Final RMSNorm",
+      "symbol": "RMSNorm (norm)",
+      "ref": "vllm/model_executor/models/deepseek_v2.py:1249",
+      "kind": "norm",
+      "desc": "Normalizes the final hidden state before the LM head."
+    },
+    {
+      "id": "lm_head",
+      "type": "lm_head",
+      "label": "LM head",
+      "symbol": "ParallelLMHead",
+      "ref": "vllm/model_executor/models/deepseek_v2.py:1636",
+      "kind": "head",
+      "desc": "Projects hidden_size \u2192 vocab_size to produce logits.",
+      "note": "tie_word_embeddings=False for DeepSeek-V3."
+    },
+    {
+      "id": "logits",
+      "type": "logits",
+      "label": "Logits processor",
+      "symbol": "LogitsProcessor",
+      "ref": "vllm/model_executor/models/deepseek_v2.py:1644",
+      "kind": "head",
+      "desc": "Gathers logits for the sampled positions; hands off to the Sampler."
+    }
+  ]
+}

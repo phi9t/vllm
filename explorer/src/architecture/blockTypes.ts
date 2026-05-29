@@ -225,16 +225,105 @@ export const BLOCK_METRICS: Record<BlockType, MetricFn> = {
       activeParams: p,                  // shared expert always runs
     }
   },
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  q_a_linear: (_cfg, _T) => ({ shape: '—', flops: 0, params: 0 }), // Phase 2/3
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  q_b_linear: (_cfg, _T) => ({ shape: '—', flops: 0, params: 0 }), // Phase 2/3
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  kv_a_linear: (_cfg, _T) => ({ shape: '—', flops: 0, params: 0 }), // Phase 2/3
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  kv_b_linear: (_cfg, _T) => ({ shape: '—', flops: 0, params: 0 }), // Phase 2/3
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  attention_mla: (_cfg, _T) => ({ shape: '—', flops: 0, params: 0 }), // Phase 2/3
+  // MLA projection blocks — Phase 3
+  q_a_linear: (cfg, T) => {
+    const d = cfg.hidden_size
+    const ql = cfg.q_lora_rank ?? 0
+    return {
+      shape: `[${T}, ${d}] → [${T}, ${ql}]`,
+      flops: 2 * d * ql * T,
+      params: d * ql,
+    }
+  },
+
+  q_b_linear: (cfg, T) => {
+    const ql   = cfg.q_lora_rank ?? 0
+    const H    = cfg.num_attention_heads
+    const qn   = cfg.qk_nope_head_dim ?? 0
+    const qr   = cfg.qk_rope_head_dim ?? 0
+    const outD = H * (qn + qr)
+    return {
+      shape: `[${T}, ${ql}] → [${T}, ${outD}]`,
+      flops: 2 * ql * outD * T,
+      params: ql * outD,
+    }
+  },
+
+  kv_a_linear: (cfg, T) => {
+    const d   = cfg.hidden_size
+    const kvl = cfg.kv_lora_rank ?? 0
+    const qr  = cfg.qk_rope_head_dim ?? 0
+    const outD = kvl + qr
+    return {
+      shape: `[${T}, ${d}] → [${T}, ${outD}]`,
+      flops: 2 * d * outD * T,
+      params: d * outD,
+    }
+  },
+
+  kv_b_linear: (cfg, T) => {
+    const kvl = cfg.kv_lora_rank ?? 0
+    const H   = cfg.num_attention_heads
+    const qn  = cfg.qk_nope_head_dim ?? 0
+    const vd  = cfg.v_head_dim ?? 0
+    const outD = H * (qn + vd)
+    return {
+      shape: `[${T}, ${kvl}] → [${T}, ${outD}]`,
+      flops: 2 * kvl * outD * T,
+      params: kvl * outD,
+    }
+  },
+
+  attention_mla: (cfg, T) => {
+    const H   = cfg.num_attention_heads
+    const qn  = cfg.qk_nope_head_dim ?? 0
+    const qr  = cfg.qk_rope_head_dim ?? 0
+    const vd  = cfg.v_head_dim ?? 0
+    const kvl = cfg.kv_lora_rank ?? 0
+    const bytes = dtypeBytes(cfg)
+    // compressed latent KV cache: (kvl + qr) per token
+    const kvBytes = (kvl + qr) * T * bytes
+    // QK attention: 2·H·(qn+qr)·T² + AV output: 2·H·vd·T²
+    const flops = 2 * H * (qn + qr) * T * T + 2 * H * vd * T * T
+    return {
+      shape: `H=${H}, latent KV ${kvl}+${qr}`,
+      flops,
+      params: 0,
+      kvBytes,
+    }
+  },
+
+  // MLA-specific norms (not over hidden_size but over lora rank)
+  mla_q_norm: (cfg, T) => {
+    const ql = cfg.q_lora_rank ?? 0
+    return {
+      shape: `[${T}, ${ql}]`,
+      flops: 4 * ql * T,
+      params: ql,
+    }
+  },
+
+  mla_kv_norm: (cfg, T) => {
+    const kvl = cfg.kv_lora_rank ?? 0
+    return {
+      shape: `[${T}, ${kvl}]`,
+      flops: 4 * kvl * T,
+      params: kvl,
+    }
+  },
+
+  // MLA output projection: H·vd → hidden_size
+  mla_o_proj: (cfg, T) => {
+    const d  = cfg.hidden_size
+    const H  = cfg.num_attention_heads
+    const vd = cfg.v_head_dim ?? 0
+    const inD = H * vd
+    return {
+      shape: `[${T}, ${inD}] → [${T}, ${d}]`,
+      flops: 2 * inD * d * T,
+      params: inD * d,
+    }
+  },
 }
 
 // --- computeMetrics ----------------------------------------------------------

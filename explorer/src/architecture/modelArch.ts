@@ -8,6 +8,7 @@ export type BlockType =
   | 'lm_head' | 'logits'
   | 'moe_router' | 'moe_experts' | 'shared_expert'
   | 'q_a_linear' | 'q_b_linear' | 'kv_a_linear' | 'kv_b_linear' | 'attention_mla'
+  | 'mla_q_norm' | 'mla_kv_norm' | 'mla_o_proj'
 
 export interface Block {
   id: string; type: BlockType; label: string; symbol: string
