@@ -303,12 +303,11 @@ body {
   transition: filter 0.2s ease;
 }
 .diagram-node:hover {
-  filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.35));
+  filter: drop-shadow(0 0 7px rgba(56, 189, 248, 0.4));
 }
-.diagram-node.active rect,
-.diagram-node.active circle {
-  stroke: var(--color-cyan);
-  stroke-width: 2.5;
+/* Selected stroke is set inline per diagram; CSS adds the glow. */
+.diagram-node.active {
+  filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.55));
 }
 .diagram-edge {
   stroke: rgba(148, 163, 184, 0.5);
@@ -326,7 +325,9 @@ body {
 .mainline-rail {
   stroke: rgba(99, 102, 241, 0.75);
   stroke-width: 3;
+  stroke-linecap: round;
   fill: none;
+  filter: drop-shadow(0 0 5px rgba(99, 102, 241, 0.3));
 }
 .mainline-tick {
   fill: var(--color-cyan);
@@ -366,6 +367,21 @@ body {
   stroke: var(--color-secondary);
   stroke-width: 1.6;
   stroke-linecap: round;
+}
+.branch-pill-text {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+}
+.kind-tag {
+  font-family: var(--font-mono);
+  font-size: 7.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  opacity: 0.85;
+  pointer-events: none;
 }
 
 /* -----------------------------------------------------------------------------

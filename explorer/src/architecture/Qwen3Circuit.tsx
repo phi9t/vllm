@@ -1,8 +1,9 @@
-// Qwen3 decoder as a compact residual-mainline diagram.
-// The residual stream is a vertical rail flowing bottom (input) → top (output).
+// Qwen3 decoder as a compact residual-mainline diagram (Observatory glass).
+// Residual stream is a vertical rail flowing bottom (input) → top (output).
 // Attention and FFN/SwiGLU branches tee off it, run a pre-norm + a stack of
-// step cards, and merge back at a residual-add (+) node. Cards are sized close
-// to body text; every card is selectable and carries its lens metric.
+// step cards inside a tinted panel, and merge back at a residual-add (+) node.
+// Cards are sized to fit their full text; every card is selectable and carries
+// its lens metric.
 import { cn } from '@/lib/utils'
 import { DECODER_LAYER, HEAD, PRELUDE, type Qwen3Block } from './qwen3Blocks'
 
@@ -24,26 +25,45 @@ const KIND_COLOR: Record<string, string> = {
 // Branch composition (ids resolve into qwen3Blocks). Order = inference flow.
 const ATTN = { preNorm: 'input_norm', steps: ['qkv_proj', 'q_norm', 'k_norm', 'rope', 'attn', 'o_proj'] }
 const FFN = { preNorm: 'post_norm', steps: ['gate_up', 'silu', 'down'] }
+const ATTN_ACCENT = '#10b981'
+const FFN_ACCENT = '#6366f1'
 
 // --- Geometry (viewBox units ≈ rendered px; the SVG is width-capped) --------
-const VIEW_W = 420
-const MAINLINE_X = 104
-const CARD_X = 290
-const CARD_W = 184
-const CARD_H = 30
-const MAIN_W = 152
-const MAIN_H = 28
-const CARD_PITCH = 42
+const VIEW_W = 510
+const MAINLINE_X = 98
+const CARD_X = 326
+const CARD_W = 252
+const CARD_H = 32
+const MAIN_W = 164
+const MAIN_H = 30
+const CARD_PITCH = 44
 const PRENORM_GAP = 16
 const JUNC_GAP = 18
-const MAIN_PITCH = 50
-const PAD = 44
-const SHELL_PAD = 13
+const MAIN_PITCH = 52
+const PAD = 46
+const SHELL_PAD = 16
 const SHELL_LEFT = CARD_X - CARD_W / 2 - SHELL_PAD
 const SHELL_RIGHT = CARD_X + CARD_W / 2 + SHELL_PAD
 
 /** Vertical span a branch occupies between its tee (bottom) and junction (top). */
 const branchHeight = (n: number) => PRENORM_GAP + CARD_H / 2 + (n - 1) * CARD_PITCH + CARD_H / 2 + JUNC_GAP
+
+/** Orthogonal SVG path with rounded (quadratic) corners. */
+function roundedOrthPath(pts: [number, number][], r = 12): string {
+  if (pts.length < 2) return ''
+  let d = `M ${pts[0][0]} ${pts[0][1]}`
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [px, py] = pts[i - 1]
+    const [cx, cy] = pts[i]
+    const [nx, ny] = pts[i + 1]
+    const before: [number, number] = [cx - Math.sign(cx - px) * r, cy - Math.sign(cy - py) * r]
+    const after: [number, number] = [cx + Math.sign(nx - cx) * r, cy + Math.sign(ny - cy) * r]
+    d += ` L ${before[0]} ${before[1]} Q ${cx} ${cy} ${after[0]} ${after[1]}`
+  }
+  const last = pts[pts.length - 1]
+  d += ` L ${last[0]} ${last[1]}`
+  return d
+}
 
 type Lens = 'flow' | 'shapes' | 'compute' | 'memory'
 
@@ -78,27 +98,47 @@ export default function Qwen3Circuit({
   return (
     <svg
       viewBox={`0 0 ${VIEW_W} ${height}`}
-      className="mx-auto w-full max-w-[480px]"
+      className="mx-auto w-full max-w-[560px]"
       role="group"
       aria-label="Qwen3 decoder as a residual-mainline diagram; input enters at the bottom, output exits at the top"
     >
+      <defs aria-hidden="true">
+        {Object.entries(KIND_COLOR).map(([kind, color]) => (
+          <linearGradient key={kind} id={`grad-${kind}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity={0.2} />
+            <stop offset="100%" stopColor={color} stopOpacity={0.035} />
+          </linearGradient>
+        ))}
+        <linearGradient id="rail-grad" gradientUnits="userSpaceOnUse" x1="0" y1={yEmbed} x2="0" y2={yLogits}>
+          <stop offset="0%" stopColor="#6366f1" />
+          <stop offset="100%" stopColor="#38bdf8" />
+        </linearGradient>
+      </defs>
+
       {/* decoder-layer bracket */}
       <rect
         x={8}
         y={bracketTop}
         width={VIEW_W - 16}
         height={bracketBot - bracketTop}
-        rx={14}
-        fill="rgba(99,102,241,0.025)"
-        stroke="rgba(99,102,241,0.18)"
-        strokeDasharray="3 5"
+        rx={16}
+        fill="rgba(99,102,241,0.02)"
+        stroke="rgba(99,102,241,0.16)"
+        strokeDasharray="2 6"
       />
-      <text x={16} y={bracketTop - 6} className="module-shell-title">
+      <text x={18} y={bracketTop - 7} className="module-shell-title">
         decoder layer × {layers}
       </text>
 
       {/* residual mainline rail (bottom → top) */}
-      <line className="mainline-rail" x1={MAINLINE_X} y1={yEmbed} x2={MAINLINE_X} y2={yLogits} />
+      <line
+        className="mainline-rail"
+        x1={MAINLINE_X}
+        y1={yEmbed}
+        x2={MAINLINE_X}
+        y2={yLogits}
+        stroke="url(#rail-grad)"
+      />
       {Array.from({ length: 6 }).map((_, i) => {
         const cy = yEmbed - ((yEmbed - yLogits) * (i + 0.5)) / 6
         return (
@@ -113,11 +153,11 @@ export default function Qwen3Circuit({
         )
       })}
       <text
-        x={MAINLINE_X - 26}
+        x={MAINLINE_X - 24}
         y={(yJ1 + yJ2) / 2}
         textAnchor="middle"
         className="module-shell-title"
-        transform={`rotate(-90, ${MAINLINE_X - 26}, ${(yJ1 + yJ2) / 2})`}
+        transform={`rotate(-90, ${MAINLINE_X - 24}, ${(yJ1 + yJ2) / 2})`}
       >
         residual stream ↑
       </text>
@@ -125,6 +165,7 @@ export default function Qwen3Circuit({
       {/* Branches (under the nodes) */}
       <Branch
         title="Attention"
+        accent={ATTN_ACCENT}
         branch={ATTN}
         yTee={yAttnTee}
         yJunc={yJ1}
@@ -134,6 +175,7 @@ export default function Qwen3Circuit({
       />
       <Branch
         title="FFN · SwiGLU"
+        accent={FFN_ACCENT}
         branch={FFN}
         yTee={yFfnTee}
         yJunc={yJ2}
@@ -160,16 +202,17 @@ export default function Qwen3Circuit({
           cy={y}
           w={MAIN_W}
           h={MAIN_H}
+          tag={false}
           selected={selectedId === id}
           onSelect={onSelect}
           metric={metric(id)}
         />
       ))}
 
-      <text x={MAINLINE_X} y={yEmbed + 26} textAnchor="middle" className="module-shell-title">
+      <text x={MAINLINE_X} y={yEmbed + 28} textAnchor="middle" className="module-shell-title">
         input_ids
       </text>
-      <text x={MAINLINE_X} y={yLogits - 20} textAnchor="middle" className="module-shell-title">
+      <text x={MAINLINE_X} y={yLogits - 22} textAnchor="middle" className="module-shell-title">
         output logits
       </text>
     </svg>
@@ -179,6 +222,7 @@ export default function Qwen3Circuit({
 // --- One residual branch ----------------------------------------------------
 function Branch({
   title,
+  accent,
   branch,
   yTee,
   yJunc,
@@ -187,6 +231,7 @@ function Branch({
   metric,
 }: {
   title: string
+  accent: string
   branch: { preNorm: string; steps: string[] }
   yTee: number
   yJunc: number
@@ -198,20 +243,36 @@ function Branch({
   const bottomCenter = yTee - PRENORM_GAP - CARD_H / 2
   const ys = cards.map((_, i) => bottomCenter - i * CARD_PITCH)
   const topY = ys[ys.length - 1]
-  const shellTop = topY - CARD_H / 2 - 24
-  const shellBot = ys[0] + CARD_H / 2 + 10
+  const shellTop = topY - CARD_H / 2 - 26
+  const shellBot = ys[0] + CARD_H / 2 + 12
+  const pillW = title.length * 6.2 + 18
 
   return (
     <g>
+      {/* tinted branch panel */}
       <rect
-        className="module-shell"
         x={SHELL_LEFT}
         y={shellTop}
         width={SHELL_RIGHT - SHELL_LEFT}
         height={shellBot - shellTop}
-        rx={12}
+        rx={14}
+        fill={accent}
+        fillOpacity={0.05}
+        stroke={accent}
+        strokeOpacity={0.22}
       />
-      <text x={SHELL_LEFT} y={shellTop - 5} className="module-shell-title">
+      {/* header pill straddling the top border */}
+      <rect
+        x={SHELL_LEFT + 14}
+        y={shellTop - 9}
+        width={pillW}
+        height={18}
+        rx={9}
+        fill="rgba(11,15,25,0.98)"
+        stroke={accent}
+        strokeOpacity={0.45}
+      />
+      <text x={SHELL_LEFT + 14 + pillW / 2} y={shellTop + 3.5} textAnchor="middle" className="branch-pill-text" fill={accent}>
         {title}
       </text>
 
@@ -219,7 +280,16 @@ function Branch({
       <circle cx={MAINLINE_X} cy={yTee} r={3.5} fill="#38bdf8" />
       <path
         className="branch-wire"
-        d={`M ${MAINLINE_X} ${yTee} H ${CARD_X} V ${yJunc} H ${MAINLINE_X}`}
+        fill="none"
+        d={roundedOrthPath(
+          [
+            [MAINLINE_X, yTee],
+            [CARD_X, yTee],
+            [CARD_X, yJunc],
+            [MAINLINE_X, yJunc],
+          ],
+          12,
+        )}
       />
 
       {cards.map((id, i) => (
@@ -230,6 +300,7 @@ function Branch({
           cy={ys[i]}
           w={CARD_W}
           h={CARD_H}
+          tag
           selected={selectedId === id}
           onSelect={onSelect}
           metric={metric(id)}
@@ -246,6 +317,7 @@ function NodeCard({
   cy,
   w,
   h,
+  tag,
   selected,
   onSelect,
   metric,
@@ -255,6 +327,7 @@ function NodeCard({
   cy: number
   w: number
   h: number
+  tag: boolean
   selected: boolean
   onSelect: (id: string) => void
   metric: string
@@ -265,7 +338,6 @@ function NodeCard({
   const x = cx - w / 2
   const y = cy - h / 2
   const hasMetric = metric !== ''
-  const trimmed = metric.length > 30 ? metric.slice(0, 29) + '…' : metric
 
   return (
     <g
@@ -281,30 +353,46 @@ function NodeCard({
         }
       }}
     >
+      {/* dark base + kind-tinted gradient + crisp border */}
+      <rect x={x} y={y} width={w} height={h} rx={10} fill="rgba(13,18,30,0.96)" />
+      <rect x={x} y={y} width={w} height={h} rx={10} fill={`url(#grad-${block.kind})`} />
+      <rect x={x + 6} y={y + 6} width={3} height={h - 12} rx={1.5} fill={color} />
       <rect
+        className="card-border"
         x={x}
         y={y}
         width={w}
         height={h}
-        rx={8}
-        fill="rgba(15,21,33,0.96)"
+        rx={10}
+        fill="none"
         stroke={selected ? '#38bdf8' : color}
         strokeWidth={selected ? 2 : 1.2}
-        strokeOpacity={selected ? 1 : 0.75}
+        strokeOpacity={selected ? 1 : 0.7}
       />
-      <rect x={x} y={y + 4} width={3} height={h - 8} rx={1.5} fill={color} />
       <text
         className="diagram-label"
-        x={x + 12}
+        x={x + 16}
         y={hasMetric ? cy - 2 : cy + 4}
         fontSize={12}
+        fontWeight={600}
         fill="#f3f4f6"
       >
         {block.label}
       </text>
       {hasMetric && (
-        <text className="diagram-label" x={x + 12} y={cy + 9} fontSize={8.5} fill="#9ca3af">
-          {trimmed}
+        <text className="diagram-label" x={x + 16} y={cy + 10} fontSize={9} fill="#9ca3af">
+          {metric}
+        </text>
+      )}
+      {tag && (
+        <text
+          className="kind-tag"
+          x={x + w - 10}
+          y={y + 13}
+          textAnchor="end"
+          fill={color}
+        >
+          {block.kind.toUpperCase()}
         </text>
       )}
     </g>
@@ -315,10 +403,11 @@ function NodeCard({
 function PlusNode({ x, y, label }: { x: number; y: number; label: string }) {
   return (
     <g aria-hidden="true">
-      <circle cx={x} cy={y} r={8.5} fill="rgba(15,21,33,0.98)" stroke="#8b5cf6" strokeWidth={1.4} />
+      <circle cx={x} cy={y} r={11} fill="none" stroke="#8b5cf6" strokeOpacity={0.25} strokeWidth={3} />
+      <circle cx={x} cy={y} r={8.5} fill="rgba(13,18,30,0.98)" stroke="#8b5cf6" strokeWidth={1.4} />
       <line className="junction-plus" x1={x - 4} y1={y} x2={x + 4} y2={y} />
       <line className="junction-plus" x1={x} y1={y - 4} x2={x} y2={y + 4} />
-      <text x={x - 14} y={y + 3} textAnchor="end" className="module-shell-title">
+      <text x={x - 16} y={y + 3} textAnchor="end" className="module-shell-title">
         {label}
       </text>
     </g>
