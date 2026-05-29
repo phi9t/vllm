@@ -1,0 +1,9 @@
+[
+  {
+    "slug": "fineweb-edu",
+    "label": "FineWeb-Edu",
+    "schema": "fineweb_schema.json",
+    "sample": "fineweb_sample.json",
+    "tokenization": "tokenization.json"
+  }
+]

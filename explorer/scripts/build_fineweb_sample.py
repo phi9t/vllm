@@ -265,9 +265,30 @@ def main() -> None:
         encoding="utf-8",
     )
 
+    # datasets/index.json — the switchable-subject index for Data mode. File
+    # names are relative to public/data/ (where the three files above live).
+    datasets_dir = out_dir / "datasets"
+    datasets_dir.mkdir(parents=True, exist_ok=True)
+    (datasets_dir / "index.json").write_text(
+        json.dumps(
+            [
+                {
+                    "slug": "fineweb-edu",
+                    "label": "FineWeb-Edu",
+                    "schema": "fineweb_schema.json",
+                    "sample": "fineweb_sample.json",
+                    "tokenization": "tokenization.json",
+                }
+            ],
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
     print(
         f"wrote fineweb_sample.json ({len(rows)} rows, {source}), fineweb_schema.json, "
-        f"tokenization.json ({len(samples)} samples, tokenizer={tok_source})"
+        f"tokenization.json ({len(samples)} samples, tokenizer={tok_source}), datasets/index.json"
     )
 
 
