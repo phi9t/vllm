@@ -61,6 +61,24 @@ FALLBACKS: dict[str, dict] = {
         "torch_dtype": "bfloat16",
         "rope_theta": 1000000.0,
     },
+    "qwen3-30b-a3b": {
+        # Verified against Qwen/Qwen3-30B-A3B HF config
+        "hidden_size": 2048,
+        "num_hidden_layers": 48,
+        "num_attention_heads": 32,
+        "num_key_value_heads": 4,
+        "head_dim": 128,
+        "intermediate_size": 6144,   # dense MLP layers (mlp_only_layers)
+        "vocab_size": 151936,
+        "tie_word_embeddings": False,
+        "torch_dtype": "bfloat16",
+        "rope_theta": 1000000.0,
+        # MoE-specific
+        "num_experts": 128,
+        "num_experts_per_tok": 8,
+        "moe_intermediate_size": 768,
+        "num_shared_experts": 0,
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -70,12 +88,15 @@ CONFIG_KEYS = [
     "hidden_size", "num_hidden_layers", "num_attention_heads",
     "num_key_value_heads", "head_dim", "intermediate_size", "vocab_size",
     "tie_word_embeddings", "torch_dtype", "rope_theta",
+    # MoE fields (optional — only present for MoE models)
+    "num_experts", "num_experts_per_tok", "moe_intermediate_size", "num_shared_experts",
 ]
 
 MODEL_LIST: list[tuple[str, str, str, str]] = [
     # (slug, hf_model_id, family, human_label)
-    ("qwen3-0_6b", "Qwen/Qwen3-0.6B", "dense-qknorm", "Qwen3-0.6B"),
-    ("qwen3-8b",   "Qwen/Qwen3-8B",   "dense-qknorm", "Qwen3-8B"),
+    ("qwen3-0_6b",    "Qwen/Qwen3-0.6B",    "dense-qknorm", "Qwen3-0.6B"),
+    ("qwen3-8b",      "Qwen/Qwen3-8B",      "dense-qknorm", "Qwen3-8B"),
+    ("qwen3-30b-a3b", "Qwen/Qwen3-30B-A3B", "moe-qknorm",   "Qwen3-30B-A3B"),
 ]
 
 # ---------------------------------------------------------------------------
@@ -240,6 +261,152 @@ DENSE_QKNORM_MLP_PRENORM: _BlockDef = _b(
     "Pre-MLP normalization, fused with the residual add.",
 )
 
+# ---------------------------------------------------------------------------
+# moe-qknorm block template
+#
+# Attention branch: identical to dense-qknorm (same symbols, same files).
+# MoE branch: router (gate Linear) + experts (FusedMoE) from qwen3_moe.py.
+# Prelude and head are also grounded in qwen3_moe.py where symbols exist.
+# ---------------------------------------------------------------------------
+
+MOE_QKNORM_PRELUDE: list[_BlockDef] = [
+    _b(
+        "embed", "embed", "embed",
+        "Token embeddings",
+        "VocabParallelEmbedding (embed_tokens)",         # display
+        "self.embed_tokens = VocabParallelEmbedding",    # grep anchor
+        "vllm/model_executor/models/qwen3_moe.py",
+        "input_ids → hidden_states. Looks up a row of the embedding matrix per token.",
+        "tie_word_embeddings reuses this matrix as the lm_head.",
+    ),
+]
+
+# Attention prenorm — grounded in qwen3_moe.py (Qwen3MoeDecoderLayer)
+MOE_QKNORM_ATT_PRENORM: _BlockDef = _b(
+    "input_norm", "rmsnorm", "norm",
+    "Input RMSNorm",
+    "RMSNorm (input_layernorm)",                       # display
+    "self.input_layernorm = RMSNorm",                  # grep anchor
+    "vllm/model_executor/models/qwen3_moe.py",
+    "Pre-attention normalization, fused with the residual add on all but the first layer.",
+)
+
+# Attention steps: reuse same grep anchors — all present in qwen3_moe.py
+MOE_QKNORM_ATT_STEPS: list[_BlockDef] = [
+    _b(
+        "qkv_proj", "qkv_linear", "proj",
+        "QKV projection",
+        "QKVParallelLinear (qkv_proj)",                # display
+        "self.qkv_proj = QKVParallelLinear",           # grep anchor
+        "vllm/model_executor/models/qwen3_moe.py",
+        "One fused linear producing Q, K, V. Split into q_dim + 2·kv_dim (GQA).",
+    ),
+    _b(
+        "q_norm", "qk_norm", "norm",
+        "Q head-norm",
+        "RMSNorm (q_norm, head_dim)",                  # display
+        "self.q_norm = RMSNorm",                       # grep anchor
+        "vllm/model_executor/models/qwen3_moe.py",
+        "Per-head RMSNorm over head_dim applied to queries before RoPE.",
+        "Qwen3-specific: QK-Norm stabilizes attention logits.",
+    ),
+    _b(
+        "k_norm", "qk_norm", "norm",
+        "K head-norm",
+        "RMSNorm (k_norm, head_dim)",                  # display
+        "self.k_norm = RMSNorm",                       # grep anchor
+        "vllm/model_executor/models/qwen3_moe.py",
+        "Per-head RMSNorm over head_dim applied to keys before RoPE.",
+        "Qwen3-specific: paired with q_norm.",
+    ),
+    _b(
+        "rope", "rope", "rope",
+        "RoPE (Q, K)",
+        "RotaryEmbedding (get_rope)",                  # display
+        "def get_rope",                                # grep anchor
+        "vllm/model_executor/layers/rotary_embedding/__init__.py",
+        "Rotary position embedding rotates Q and K by position. Uses a cached cos/sin table.",
+        "rope_theta = 1e6 for long context.",
+    ),
+    _b(
+        "attn", "attention_gqa", "attn",
+        "Attention (paged KV)",
+        "Attention.forward",                           # display
+        "def forward",                                 # grep anchor
+        "vllm/model_executor/layers/attention/attention.py",
+        "Scaled dot-product attention over the paged KV cache; backend chosen at init. GQA: kv_heads < heads.",
+        "KV cache lives inside this layer (block tables, slot mapping).",
+    ),
+    _b(
+        "o_proj", "o_proj", "proj",
+        "Output projection",
+        "RowParallelLinear (o_proj)",                  # display
+        "self.o_proj = RowParallelLinear",             # grep anchor
+        "vllm/model_executor/models/qwen3_moe.py",
+        "Projects the attention output (q_dim) back to hidden_size.",
+    ),
+]
+
+# MoE prenorm — post-attention layernorm in qwen3_moe.py
+MOE_QKNORM_MOE_PRENORM: _BlockDef = _b(
+    "post_norm", "rmsnorm", "norm",
+    "Post-attn RMSNorm",
+    "RMSNorm (post_attention_layernorm)",              # display
+    "self.post_attention_layernorm = RMSNorm",         # grep anchor
+    "vllm/model_executor/models/qwen3_moe.py",
+    "Pre-MoE normalization, fused with the residual add.",
+)
+
+# MoE steps: router gate + FusedMoE experts block
+MOE_QKNORM_MOE_STEPS: list[_BlockDef] = [
+    _b(
+        "router", "moe_router", "router",
+        "MoE router (gate)",
+        "ReplicatedLinear (gate)",                     # display
+        "self.gate = ReplicatedLinear",                # grep anchor
+        "vllm/model_executor/models/qwen3_moe.py",
+        "Top-k gating: projects hidden_size → num_experts and selects the top-k experts per token.",
+        "norm_topk_prob=True: softmax over top-k scores is renormalized so they sum to 1.",
+    ),
+    _b(
+        "experts", "moe_experts", "moe",
+        "Sparse expert FFNs",
+        "FusedMoE (experts)",                         # display
+        "self.experts = FusedMoE",                    # grep anchor
+        "vllm/model_executor/models/qwen3_moe.py",
+        "128 independent SwiGLU FFNs (moe_intermediate_size=768); only top-8 run per token.",
+        "Total params: E×3×d×I across all experts; active params: k×3×d×I per token.",
+    ),
+]
+
+MOE_QKNORM_HEAD: list[_BlockDef] = [
+    _b(
+        "final_norm", "rmsnorm", "norm",
+        "Final RMSNorm",
+        "RMSNorm (norm)",                             # display
+        "self.norm = RMSNorm",                        # grep anchor
+        "vllm/model_executor/models/qwen3_moe.py",
+        "Normalizes the final hidden state before the LM head.",
+    ),
+    _b(
+        "lm_head", "lm_head", "head",
+        "LM head",
+        "ParallelLMHead",                             # display
+        "self.lm_head = ParallelLMHead",              # grep anchor
+        "vllm/model_executor/models/qwen3_moe.py",
+        "Projects hidden_size → vocab_size to produce logits.",
+        "Weight tied to embed_tokens when tie_word_embeddings is set.",
+    ),
+    _b(
+        "logits", "logits", "head",
+        "Logits processor",
+        "LogitsProcessor",                            # display
+        "self.logits_processor = LogitsProcessor",    # grep anchor
+        "vllm/model_executor/models/qwen3_moe.py",
+        "Gathers logits for the sampled positions; hands off to the Sampler.",
+    ),
+]
+
 TEMPLATES: dict[str, dict] = {
     "dense-qknorm": {
         "prelude": DENSE_QKNORM_PRELUDE,
@@ -248,6 +415,14 @@ TEMPLATES: dict[str, dict] = {
         "mlp_prenorm": DENSE_QKNORM_MLP_PRENORM,
         "mlp_steps": DENSE_QKNORM_MLP_STEPS,
         "head": DENSE_QKNORM_HEAD,
+    },
+    "moe-qknorm": {
+        "prelude": MOE_QKNORM_PRELUDE,
+        "att_prenorm": MOE_QKNORM_ATT_PRENORM,
+        "att_steps": MOE_QKNORM_ATT_STEPS,
+        "moe_prenorm": MOE_QKNORM_MOE_PRENORM,
+        "moe_steps": MOE_QKNORM_MOE_STEPS,
+        "head": MOE_QKNORM_HEAD,
     },
 }
 
@@ -271,7 +446,9 @@ def load_hf_config(hf_model_id: str) -> dict | None:
     out: dict = {}
     for k in CONFIG_KEYS:
         if hasattr(cfg, k):
-            out[k] = getattr(cfg, k)
+            v = getattr(cfg, k)
+            if v is not None:  # skip None MoE fields for dense models
+                out[k] = v
     # Derive head_dim if missing
     if "head_dim" not in out and out.get("hidden_size") and out.get("num_attention_heads"):
         out["head_dim"] = out["hidden_size"] // out["num_attention_heads"]
@@ -309,8 +486,9 @@ def _make_block(bdef: _BlockDef, repo_root: Path, hint_map: dict[str, int]) -> d
     return block
 
 
-# Hint lines from qwen3Blocks.ts (fall-through if symbol not found)
+# Hint lines — fallback if symbol grep fails (file:approx-line)
 _HINTS: dict[str, int] = {
+    # dense-qknorm hints (qwen3.py / qwen2.py symbols)
     "embed":       358,
     "input_norm":  211,
     "qkv_proj":     98,
@@ -326,6 +504,9 @@ _HINTS: dict[str, int] = {
     "final_norm":  382,
     "lm_head":     298,
     "logits":      307,
+    # moe-qknorm hints (qwen3_moe.py symbols)
+    "router":      179,   # self.gate = ReplicatedLinear
+    "experts":     211,   # self.experts = FusedMoE
 }
 
 
@@ -344,11 +525,13 @@ def build_manifest(
         fallback_base = FALLBACKS[slug]
         cfg: dict = {}
         for k in CONFIG_KEYS:
-            cfg[k] = raw.get(k, fallback_base.get(k))
+            v = raw.get(k, fallback_base.get(k))
+            if v is not None:
+                cfg[k] = v
         print(f"[ok] {hf_model_id}: loaded from HuggingFace (transformers)")
     else:
         source = "fallback"
-        cfg = dict(FALLBACKS[slug])
+        cfg = {k: v for k, v in FALLBACKS[slug].items() if v is not None}
         print(f"[warn] {hf_model_id}: using hard-coded fallback config")
 
     # --- template -------------------------------------------------------------
@@ -360,28 +543,51 @@ def build_manifest(
     prelude = [mb(b) for b in tmpl["prelude"]]
     att_prenorm = mb(tmpl["att_prenorm"])
     att_steps   = [mb(b) for b in tmpl["att_steps"]]
-    mlp_prenorm = mb(tmpl["mlp_prenorm"])
-    mlp_steps   = [mb(b) for b in tmpl["mlp_steps"]]
     head        = [mb(b) for b in tmpl["head"]]
 
-    layers_entry = {
-        "repeat": cfg["num_hidden_layers"],
-        "label": "decoder layer",
-        "branches": [
-            {
-                "name": "attn",
-                "accent": "#10b981",
-                "preNorm": att_prenorm,
-                "steps": att_steps,
-            },
-            {
-                "name": "mlp",
-                "accent": "#6366f1",
-                "preNorm": mlp_prenorm,
-                "steps": mlp_steps,
-            },
-        ],
-    }
+    if family == "moe-qknorm":
+        moe_prenorm = mb(tmpl["moe_prenorm"])
+        moe_steps   = [mb(b) for b in tmpl["moe_steps"]]
+        layers_entry = {
+            "repeat": cfg["num_hidden_layers"],
+            "label": "MoE decoder layer",
+            "branches": [
+                {
+                    "name": "attn",
+                    "accent": "#10b981",
+                    "preNorm": att_prenorm,
+                    "steps": att_steps,
+                },
+                {
+                    "name": "moe",
+                    "accent": "#f472b6",
+                    "preNorm": moe_prenorm,
+                    "steps": moe_steps,
+                },
+            ],
+        }
+    else:
+        # dense-qknorm (and future dense families)
+        mlp_prenorm = mb(tmpl["mlp_prenorm"])
+        mlp_steps   = [mb(b) for b in tmpl["mlp_steps"]]
+        layers_entry = {
+            "repeat": cfg["num_hidden_layers"],
+            "label": "decoder layer",
+            "branches": [
+                {
+                    "name": "attn",
+                    "accent": "#10b981",
+                    "preNorm": att_prenorm,
+                    "steps": att_steps,
+                },
+                {
+                    "name": "mlp",
+                    "accent": "#6366f1",
+                    "preNorm": mlp_prenorm,
+                    "steps": mlp_steps,
+                },
+            ],
+        }
 
     return {
         "model": hf_model_id,
@@ -400,28 +606,31 @@ def build_manifest(
 # ---------------------------------------------------------------------------
 
 def compute_total_params(cfg: dict) -> int:
-    """Dense Transformer parameter count (no training/backward, no bias assumed).
+    """Transformer parameter count (no bias assumed; tied embeddings counted once).
 
-    Formula:
-      embeddings:  vocab * hidden          (counted once; tied => lm_head reuses)
+    For dense models:
+      embeddings:  vocab * hidden
       per layer:
         qkv_proj:  hidden * (q_dim + 2*kv_dim)
-        q_norm:    head_dim
-        k_norm:    head_dim
+        q_norm + k_norm: head_dim each
         o_proj:    q_dim * hidden
-        input_norm: hidden
-        post_norm:  hidden
+        input_norm + post_norm: hidden each
         gate_up:   hidden * 2 * inter
         down:      inter * hidden
       final_norm:  hidden
-      lm_head:     vocab * hidden          (tied => already counted)
+      lm_head:     vocab * hidden  (0 if tied)
+
+    For MoE models (num_experts present in cfg):
+      MLP params replaced per layer by:
+        router:    hidden * num_experts
+        experts:   num_experts * 3 * hidden * moe_intermediate_size  (all expert weights)
+      Attention params identical to dense.
     """
     d     = cfg["hidden_size"]
     L     = cfg["num_hidden_layers"]
     heads = cfg["num_attention_heads"]
     kv_h  = cfg["num_key_value_heads"]
     hd    = cfg["head_dim"]
-    inter = cfg["intermediate_size"]
     vocab = cfg["vocab_size"]
     tied  = cfg.get("tie_word_embeddings", False)
 
@@ -431,15 +640,29 @@ def compute_total_params(cfg: dict) -> int:
     # Embeddings (counted once)
     embed = vocab * d
 
-    # Per-layer params
+    # Attention params — same for dense and MoE
     qkv    = d * (q_dim + 2 * kv_dim)
     q_norm = hd
     k_norm = hd
     o_proj = q_dim * d
     norms  = 2 * d          # input_norm + post_norm
-    gate_up = d * 2 * inter
-    down   = inter * d
-    per_layer = qkv + q_norm + k_norm + o_proj + norms + gate_up + down
+    attn_params = qkv + q_norm + k_norm + o_proj + norms
+
+    E = cfg.get("num_experts")
+    if E:
+        # MoE model: replace dense MLP with router + expert FFNs
+        I = cfg["moe_intermediate_size"]
+        router  = d * E                 # gate Linear: hidden → num_experts
+        experts = E * 3 * d * I        # all E expert SwiGLU FFNs (gate+up+down)
+        ffn_params = router + experts
+    else:
+        # Dense model: standard SwiGLU FFN
+        inter = cfg["intermediate_size"]
+        gate_up  = d * 2 * inter
+        down     = inter * d
+        ffn_params = gate_up + down
+
+    per_layer = attn_params + ffn_params
 
     # Head
     final_norm = d

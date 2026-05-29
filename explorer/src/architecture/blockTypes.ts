@@ -184,13 +184,47 @@ export const BLOCK_METRICS: Record<BlockType, MetricFn> = {
     params: 0,
   }),
 
-  // Phase 2/3 stubs — Phase 1 models never use these
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  moe_router: (_cfg, _T) => ({ shape: '—', flops: 0, params: 0 }), // Phase 2/3
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  moe_experts: (_cfg, _T) => ({ shape: '—', flops: 0, params: 0 }), // Phase 2/3
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  shared_expert: (_cfg, _T) => ({ shape: '—', flops: 0, params: 0 }), // Phase 2/3
+  // Phase 2 MoE blocks — derived from ModelConfig MoE fields
+  moe_router: (cfg, T) => {
+    const d = cfg.hidden_size
+    const E = cfg.num_experts ?? 1
+    return {
+      shape: `[${T}, ${d}] → [${T}, ${E}]`,
+      flops: 2 * d * E * T,
+      params: d * E,
+    }
+  },
+
+  moe_experts: (cfg, T) => {
+    const d = cfg.hidden_size
+    const E = cfg.num_experts ?? 1
+    const k = cfg.num_experts_per_tok ?? 1
+    const I = cfg.moe_intermediate_size ?? cfg.intermediate_size
+    // Each expert is a SwiGLU FFN: gate_up (d→2I) + down (I→d) = 3·d·I params
+    const paramsPerExpert = 3 * d * I
+    return {
+      shape: `[${T}, ${d}] → [${T}, ${d}]  (top-${k}/${E})`,
+      flops: k * 6 * d * I * T,        // only top-k experts run per token
+      params: E * paramsPerExpert,      // total across all experts
+      activeParams: k * paramsPerExpert, // only top-k run per token
+    }
+  },
+
+  shared_expert: (cfg, T) => {
+    // Used by some MoE models (e.g. DeepSeek); Qwen3-MoE has no shared expert.
+    // Width = num_shared_experts * moe_intermediate_size
+    const d = cfg.hidden_size
+    const ns = cfg.num_shared_experts ?? 1
+    const I = cfg.moe_intermediate_size ?? cfg.intermediate_size
+    const width = ns * I
+    const p = 3 * d * width
+    return {
+      shape: `[${T}, ${d}] → [${T}, ${d}]  (${ns} shared)`,
+      flops: 6 * d * width * T,
+      params: p,
+      activeParams: p,                  // shared expert always runs
+    }
+  },
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   q_a_linear: (_cfg, _T) => ({ shape: '—', flops: 0, params: 0 }), // Phase 2/3
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

@@ -10,5 +10,11 @@
     "label": "Qwen3-8B",
     "family": "dense-qknorm",
     "totalParams": 8190735360
+  },
+  {
+    "slug": "qwen3-30b-a3b",
+    "label": "Qwen3-30B-A3B",
+    "family": "moe-qknorm",
+    "totalParams": 30532122624
   }
 ]
