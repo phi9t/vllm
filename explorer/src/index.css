@@ -322,6 +322,62 @@ body {
   pointer-events: none;
 }
 
+/* Residual-mainline circuit (Qwen3 architecture, Lumina lineage) ------------- */
+.mainline-rail {
+  stroke: rgba(99, 102, 241, 0.75);
+  stroke-width: 3;
+  fill: none;
+}
+.mainline-tick {
+  fill: var(--color-cyan);
+  animation: mainline-flow 2.4s ease-in-out infinite;
+}
+@keyframes mainline-flow {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.95;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mainline-tick {
+    animation: none;
+    opacity: 0.6;
+  }
+}
+.branch-wire {
+  stroke: rgba(148, 163, 184, 0.5);
+  stroke-width: 1.5;
+  fill: none;
+}
+.branch-spine {
+  stroke: rgba(56, 189, 248, 0.55);
+  stroke-width: 1.6;
+  fill: none;
+}
+.module-shell {
+  fill: rgba(99, 102, 241, 0.04);
+  stroke: rgba(99, 102, 241, 0.22);
+  stroke-dasharray: 4 4;
+}
+.module-shell-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  fill: var(--color-ink-soft);
+  pointer-events: none;
+}
+.junction-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  fill: var(--color-ink);
+  pointer-events: none;
+}
+.circuit-arrow-head {
+  fill: rgba(56, 189, 248, 0.7);
+}
+
 /* -----------------------------------------------------------------------------
    Detail drawer (Component + Architecture modes)
    ----------------------------------------------------------------------------- */
