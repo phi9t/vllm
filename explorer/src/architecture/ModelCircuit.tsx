@@ -53,6 +53,18 @@ const SHELL_PAD = 16
 const branchHeight = (n: number) =>
   PRENORM_GAP + CARD_H / 2 + (n - 1) * CARD_PITCH + CARD_H / 2 + JUNC_GAP
 
+/**
+ * Accent color for a layer-group bracket, derived from its branches (no schema change).
+ * Prefers the FFN/MoE branch (kind moe/mlp) so dense groups read indigo and MoE groups pink;
+ * falls back to the last branch's accent, then indigo.
+ */
+function groupAccent(group: LayerGroup): string {
+  const isFfn = (b: import('./modelArch').Branch) =>
+    [b.preNorm, ...b.steps].some((blk) => blk.kind === 'moe' || blk.kind === 'mlp')
+  const ffn = [...group.branches].reverse().find(isFfn)
+  return ffn?.accent ?? group.branches[group.branches.length - 1]?.accent ?? '#6366f1'
+}
+
 // --- Computed layout (per manifest) ------------------------------------------
 
 interface Layout {
@@ -249,24 +261,25 @@ export default function ModelCircuit({
         </linearGradient>
       </defs>
 
-      {/* Layer group brackets */}
-      {groupLayouts.map(({ group, bracketTop, bracketBot }, gi) => (
-        <g key={gi}>
+      {/* Layer group brackets (background) — per-group accent tint */}
+      {groupLayouts.map(({ group, bracketTop, bracketBot }, gi) => {
+        const accent = groupAccent(group)
+        return (
           <rect
+            key={gi}
             x={8}
             y={bracketTop}
             width={VIEW_W - 16}
             height={bracketBot - bracketTop}
             rx={16}
-            fill="rgba(99,102,241,0.02)"
-            stroke="rgba(99,102,241,0.16)"
+            fill={accent}
+            fillOpacity={0.035}
+            stroke={accent}
+            strokeOpacity={0.35}
             strokeDasharray="2 6"
           />
-          <text x={18} y={bracketTop - 7} className="module-shell-title">
-            {group.label ?? 'decoder layer'} × {group.repeat}
-          </text>
-        </g>
-      ))}
+        )
+      })}
 
       {/* Residual mainline rail (bottom → top) */}
       <line
@@ -276,7 +289,20 @@ export default function ModelCircuit({
         x2={MAINLINE_X}
         y2={yTop}
         stroke="url(#rail-grad)"
-      />
+      >
+        <title>residual stream — input (bottom) → output (top)</title>
+      </line>
+      {/* Wide invisible hit-line so the thin rail is easy to hover */}
+      <line
+        x1={MAINLINE_X}
+        y1={yBot}
+        x2={MAINLINE_X}
+        y2={yTop}
+        stroke="transparent"
+        strokeWidth={14}
+      >
+        <title>residual stream — input (bottom) → output (top)</title>
+      </line>
       {Array.from({ length: 6 }).map((_, i) => {
         const cy = yBot - ((yBot - yTop) * (i + 0.5)) / 6
         return (
@@ -290,20 +316,6 @@ export default function ModelCircuit({
           />
         )
       })}
-      {groupLayouts.length > 0 && (
-        <text
-          x={MAINLINE_X - 24}
-          y={(groupLayouts[0].branches[groupLayouts[0].branches.length - 1].yTee +
-            groupLayouts[groupLayouts.length - 1].branches[0].yJunc) / 2}
-          textAnchor="middle"
-          className="module-shell-title"
-          transform={`rotate(-90, ${MAINLINE_X - 24}, ${(groupLayouts[0].branches[groupLayouts[0].branches.length - 1].yTee +
-            groupLayouts[groupLayouts.length - 1].branches[0].yJunc) / 2})`}
-        >
-          residual stream ↑
-        </text>
-      )}
-
       {/* Layer group branches and plus nodes */}
       {groupLayouts.map(({ group: _g, branches }, gi) =>
         branches.map(({ branch, yTee, yJunc }) => (
@@ -361,12 +373,43 @@ export default function ModelCircuit({
         />
       ))}
 
-      <text x={MAINLINE_X} y={yBot + 28} textAnchor="middle" className="module-shell-title">
-        input_ids
-      </text>
-      <text x={MAINLINE_X} y={yTop - 22} textAnchor="middle" className="module-shell-title">
-        output logits
-      </text>
+      {/* Rail-end caps — subtle terminals that carry the I/O labels on hover */}
+      <circle cx={MAINLINE_X} cy={yBot} r={3.5} fill="#6366f1">
+        <title>input_ids</title>
+      </circle>
+      <circle cx={MAINLINE_X} cy={yTop} r={3.5} fill="#38bdf8">
+        <title>output logits</title>
+      </circle>
+
+      {/* Layer group label chips (top layer, never occluded) */}
+      {groupLayouts.map(({ group, bracketTop }, gi) => {
+        const accent = groupAccent(group)
+        const label = `${group.label ?? 'decoder layer'} × ${group.repeat}`
+        const chipW = label.length * 6.2 + 18
+        return (
+          <g key={`chip-${gi}`} aria-hidden="true">
+            <rect
+              x={14}
+              y={bracketTop - 9}
+              width={chipW}
+              height={18}
+              rx={9}
+              fill="rgba(11,15,25,0.98)"
+              stroke={accent}
+              strokeOpacity={0.5}
+            />
+            <text
+              x={14 + chipW / 2}
+              y={bracketTop + 3.5}
+              textAnchor="middle"
+              className="branch-pill-text"
+              fill={accent}
+            >
+              {label}
+            </text>
+          </g>
+        )
+      })}
     </svg>
   )
 }
@@ -571,13 +614,11 @@ function NodeCard({
 function PlusNode({ x, y, label }: { x: number; y: number; label: string }) {
   return (
     <g aria-hidden="true">
+      <title>{label} — residual add</title>
       <circle cx={x} cy={y} r={11} fill="none" stroke="#8b5cf6" strokeOpacity={0.25} strokeWidth={3} />
       <circle cx={x} cy={y} r={8.5} fill="rgba(13,18,30,0.98)" stroke="#8b5cf6" strokeWidth={1.4} />
       <line className="junction-plus" x1={x - 4} y1={y} x2={x + 4} y2={y} />
       <line className="junction-plus" x1={x} y1={y - 4} x2={x} y2={y + 4} />
-      <text x={x - 16} y={y + 3} textAnchor="end" className="module-shell-title">
-        {label}
-      </text>
     </g>
   )
 }
