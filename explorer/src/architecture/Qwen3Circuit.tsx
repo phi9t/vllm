@@ -30,11 +30,11 @@ const FFN_ACCENT = '#6366f1'
 
 // --- Geometry (viewBox units ≈ rendered px; the SVG is width-capped) --------
 const VIEW_W = 510
-const MAINLINE_X = 98
+const MAINLINE_X = 106
 const CARD_X = 326
 const CARD_W = 252
 const CARD_H = 32
-const MAIN_W = 164
+const MAIN_W = 196
 const MAIN_H = 30
 const CARD_PITCH = 44
 const PRENORM_GAP = 16
