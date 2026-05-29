@@ -348,34 +348,24 @@ body {
   }
 }
 .branch-wire {
-  stroke: rgba(148, 163, 184, 0.5);
-  stroke-width: 1.5;
-  fill: none;
-}
-.branch-spine {
-  stroke: rgba(56, 189, 248, 0.55);
-  stroke-width: 1.6;
+  stroke: rgba(148, 163, 184, 0.45);
+  stroke-width: 1.4;
   fill: none;
 }
 .module-shell {
-  fill: rgba(99, 102, 241, 0.04);
-  stroke: rgba(99, 102, 241, 0.22);
-  stroke-dasharray: 4 4;
+  fill: rgba(99, 102, 241, 0.035);
+  stroke: rgba(99, 102, 241, 0.18);
 }
 .module-shell-title {
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: 10px;
   fill: var(--color-ink-soft);
   pointer-events: none;
 }
-.junction-label {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  fill: var(--color-ink);
-  pointer-events: none;
-}
-.circuit-arrow-head {
-  fill: rgba(56, 189, 248, 0.7);
+.junction-plus {
+  stroke: var(--color-secondary);
+  stroke-width: 1.6;
+  stroke-linecap: round;
 }
 
 /* -----------------------------------------------------------------------------

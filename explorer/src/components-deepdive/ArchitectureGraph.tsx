@@ -37,7 +37,7 @@ export default function ArchitectureGraph({
   const centers = new Map(nodes.map((n, i) => [n.id, center(n.id, i)]))
 
   return (
-    <svg viewBox="0 0 640 500" className="w-full" role="img" aria-label="V1 engine component graph">
+    <svg viewBox="0 0 640 500" className="w-full" role="group" aria-label="V1 engine component graph">
       {edges.map((e, i) => {
         const a = centers.get(e.from)
         const b = centers.get(e.to)
