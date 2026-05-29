@@ -1,0 +1,64 @@
+name: Deploy Explorer to GitHub Pages
+
+# Builds the explorer/ SPA and publishes it to GitHub Pages at
+# https://phi9t.github.io/vllm/ . Local DX tool of the research fork — not an
+# upstream artifact. Enable once via: repo Settings → Pages → Source: GitHub Actions
+# (or `gh api repos/<owner>/vllm/pages -X POST -f build_type=workflow`).
+
+on:
+  push:
+    branches: [phi9t-mainline]
+    paths:
+      - 'explorer/**'
+      - '.github/workflows/explorer-pages.yml'
+  workflow_dispatch:
+
+# Allow the deploy job to publish to Pages via OIDC.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One concurrent deploy; let an in-flight run finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: explorer
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: explorer/package-lock.json
+
+      - run: npm ci
+
+      # Project page lives under /vllm/ — vite.config.ts reads VITE_BASE_PATH,
+      # and lib/assets.ts resolves data via import.meta.env.BASE_URL.
+      - run: npm run build
+        env:
+          VITE_BASE_PATH: /vllm/
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: explorer/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
