@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { fetchExplorerJson, errorMessage } from '@/lib/fetch'
 import { cn } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,6 +12,8 @@ import type {
   SectionNode,
 } from './types'
 
+type Page = 'flow' | 'subsystems'
+
 export default function ComponentExplorer({
   onOpenArchitecture,
 }: {
@@ -20,6 +22,7 @@ export default function ComponentExplorer({
   const [manifest, setManifest] = useState<ComponentManifest | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selected, setSelected] = useState<DrawerDetail | null>(null)
+  const [page, setPage] = useState<Page>('flow')
 
   useEffect(() => {
     fetchExplorerJson<ComponentManifest>('components.json')
@@ -87,16 +90,27 @@ export default function ComponentExplorer({
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="dashboard-grid">
-        <div className="flex flex-col gap-5">
-          <Card>
+      {/* Pager — flow on one page, every subsystem on the next */}
+      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Component view">
+        <PagerTab active={page === 'flow'} onClick={() => setPage('flow')}>
+          Request flow
+        </PagerTab>
+        <PagerTab active={page === 'subsystems'} onClick={() => setPage('subsystems')}>
+          All subsystems ({manifest.sections.length})
+        </PagerTab>
+      </div>
+
+      {page === 'flow' ? (
+        // Diagram fills the entire left half; detail sits at the top of the right half.
+        <div className="grid items-start gap-5 lg:grid-cols-2">
+          <Card className="flex flex-col">
             <CardHeader>
               <CardTitle>V1 engine — request flow</CardTitle>
               <p className="text-sm text-ink-soft">
                 The §2 architecture. Click a box for its source location and runnable hack.
               </p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex flex-1 items-center justify-center">
               <ArchitectureGraph
                 nodes={manifest.nodes}
                 edges={manifest.edges}
@@ -105,44 +119,78 @@ export default function ComponentExplorer({
               />
             </CardContent>
           </Card>
-        </div>
-        <ComponentDrawer detail={selected} onOpenArchitecture={onOpenArchitecture} />
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>All subsystems ({manifest.sections.length})</CardTitle>
-          <p className="text-sm text-ink-soft">
-            Every section of the guide — the major components beyond the core flow.
-          </p>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {manifest.sections.map((s) => (
-              <button
-                key={s.id}
-                className={cn(
-                  'rounded-lg border px-3 py-2 text-left transition-colors',
-                  selected?.title === s.title
-                    ? 'border-panelborder-active bg-panel-hover'
-                    : 'border-panelborder bg-panel hover:border-panelborder-active',
-                )}
-                onClick={() => setSelected(fromSection(s))}
-              >
-                <div className="flex items-baseline gap-2">
-                  <span className="font-mono text-xs text-cyan">§{s.section}</span>
-                  <span className="text-sm font-medium text-ink">{s.title}</span>
-                </div>
-                {s.hacks.length > 0 && (
-                  <div className="mt-1 font-mono text-[11px] text-success">
-                    ▶ {s.hacks.map((h) => h.replace('hacks/', '')).join(', ')}
-                  </div>
-                )}
-              </button>
-            ))}
+          <div className="lg:sticky lg:top-6">
+            <ComponentDrawer detail={selected} onOpenArchitecture={onOpenArchitecture} />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      ) : (
+        // Subsystems list on the left; the same detail drawer on the right.
+        <div className="grid items-start gap-5 lg:grid-cols-[1fr_360px]">
+          <Card>
+            <CardHeader>
+              <CardTitle>All subsystems ({manifest.sections.length})</CardTitle>
+              <p className="text-sm text-ink-soft">
+                Every section of the guide — the major components beyond the core flow.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {manifest.sections.map((s) => (
+                  <button
+                    key={s.id}
+                    className={cn(
+                      'rounded-lg border px-3 py-2 text-left transition-colors',
+                      selected?.title === s.title
+                        ? 'border-panelborder-active bg-panel-hover'
+                        : 'border-panelborder bg-panel hover:border-panelborder-active',
+                    )}
+                    onClick={() => setSelected(fromSection(s))}
+                  >
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-mono text-xs text-cyan">§{s.section}</span>
+                      <span className="text-sm font-medium text-ink">{s.title}</span>
+                    </div>
+                    {s.hacks.length > 0 && (
+                      <div className="mt-1 font-mono text-[11px] text-success">
+                        ▶ {s.hacks.map((h) => h.replace('hacks/', '')).join(', ')}
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+          <div className="lg:sticky lg:top-6">
+            <ComponentDrawer detail={selected} onOpenArchitecture={onOpenArchitecture} />
+          </div>
+        </div>
+      )}
     </div>
+  )
+}
+
+function PagerTab({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      className={cn(
+        'rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors',
+        active
+          ? 'border-panelborder-active bg-panel-hover text-ink'
+          : 'border-panelborder bg-panel text-ink-soft hover:text-ink',
+      )}
+    >
+      {children}
+    </button>
   )
 }
