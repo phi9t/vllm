@@ -472,11 +472,11 @@ MLA_MOE_ATT_PRENORM: _BlockDef = _b(
 MLA_MOE_ATT_STEPS: list[_BlockDef] = [
     _b(
         "q_a", "q_a_linear", "latent",
-        "Q latent projection (A)",
+        "Q down-proj (A)",
         "ReplicatedLinear (q_a_proj)",
         "self.q_a_proj = ReplicatedLinear",
         _DSV2,
-        "Projects hidden_size → q_lora_rank (low-rank latent for queries).",
+        "Q latent projection (A): projects hidden_size → q_lora_rank, compressing queries into a low-rank latent space (MLA down-projection).",
     ),
     _b(
         "q_a_norm", "mla_q_norm", "norm",
@@ -488,19 +488,19 @@ MLA_MOE_ATT_STEPS: list[_BlockDef] = [
     ),
     _b(
         "q_b", "q_b_linear", "latent",
-        "Q decompression projection (B)",
+        "Q up-proj (B)",
         "ColumnParallelLinear (q_b_proj)",
         "self.q_b_proj = ColumnParallelLinear",
         _DSV2,
-        "Decompresses q_lora_rank → H·(qk_nope_head_dim + qk_rope_head_dim).",
+        "Q decompression projection (B): decompresses q_lora_rank → H·(qk_nope_head_dim + qk_rope_head_dim), expanding queries back to full multi-head dimension (MLA up-projection).",
     ),
     _b(
         "kv_a", "kv_a_linear", "latent",
-        "KV latent projection (A)",
+        "KV down-proj (A)",
         "ReplicatedLinear (kv_a_proj_with_mqa)",
         "self.kv_a_proj_with_mqa = ReplicatedLinear",
         _DSV2,
-        "Projects hidden_size → kv_lora_rank + qk_rope_head_dim (latent + decoupled RoPE key).",
+        "KV latent projection (A): projects hidden_size → kv_lora_rank + qk_rope_head_dim, compressing keys/values into a shared low-rank latent plus a decoupled RoPE key (MLA down-projection).",
     ),
     _b(
         "kv_a_norm", "mla_kv_norm", "norm",
@@ -512,11 +512,11 @@ MLA_MOE_ATT_STEPS: list[_BlockDef] = [
     ),
     _b(
         "kv_b", "kv_b_linear", "latent",
-        "KV decompression projection (B)",
+        "KV up-proj (B)",
         "ColumnParallelLinear (kv_b_proj)",
         "self.kv_b_proj = ColumnParallelLinear",
         _DSV2,
-        "Decompresses kv_lora_rank → H·(qk_nope_head_dim + v_head_dim).",
+        "KV decompression projection (B): decompresses kv_lora_rank → H·(qk_nope_head_dim + v_head_dim), reconstructing full key/value heads for attention (MLA up-projection).",
     ),
     _b(
         "rope", "rope", "rope",
@@ -529,11 +529,11 @@ MLA_MOE_ATT_STEPS: list[_BlockDef] = [
     ),
     _b(
         "attn", "attention_mla", "attn",
-        "MLA Attention (paged KV)",
+        "MLA attention",
         "Attention.forward",
         "def forward",
         "vllm/model_executor/layers/attention/attention.py",
-        "Scaled dot-product attention with compressed KV cache. KV cache stores latent (kv_lora_rank+qk_rope_head_dim) per token.",
+        "MLA Attention (paged KV): scaled dot-product attention with compressed KV cache. KV cache stores the latent vector (kv_lora_rank + qk_rope_head_dim dims) per token — far smaller than GQA.",
         "KV cache is (kvl+qr)·bytes per token — far smaller than GQA.",
     ),
     _b(

@@ -92,13 +92,40 @@ verify() {
   build_app
   cat <<'EOF'
 
-Manual verification checklist (see PLAN.md > Verification):
-  [ ] .observatory-bg + dark theme + Inter/Fira fonts load
-  [ ] family switcher toggles 3 modes; aria-pressed / skip-link / :focus-visible work
-  [ ] Data mode: fineweb-edu schema + recharts dists + Qwen3 tokenization vs token_count
-  [ ] Component mode: clickable graph; drawer shows guide prose + working file:line + hack
-  [ ] Architecture mode: 15-block Qwen3 diagram; lens recomputes; block drawer; GPUModelRunner link
-  [ ] 1024px breakpoint collapses to single column
+Manual verification checklist (see GENERALIZATION_WORKFLOW.md §5 for the full audit):
+
+Shell & shared UX:
+  [ ] .observatory-bg radial gradient + dark void; Inter (prose) + Fira Code (mono) load
+  [ ] Family switcher toggles 3 modes (Data / Component / Architecture); aria-pressed reflects state
+  [ ] .skip-link at page top navigates to #main-content; :focus-visible 3px outline on all controls
+  [ ] 1024px breakpoint collapses dashboard-grid to single column
+
+Data mode:
+  [ ] FineWeb-edu schema tab: field names + types render; source file:line links to GitHub
+  [ ] Stats tab: recharts distributions visible (token_count, text_length, language_score)
+  [ ] Tokenization tab: Qwen3 token_count estimate vs token_count field; slider adjusts preview
+
+Component mode:
+  [ ] V1-engine subsystem graph renders; nodes are clickable
+  [ ] Drawer shows guide prose, working file:line GitHub link, and associated hack entry
+  [ ] Keyboard: Tab reaches every node; Enter/Space opens drawer
+
+Architecture mode (4 switchable models):
+  [ ] Qwen3-0.6B  — dense-qknorm diagram; all blocks render; no text overflow
+  [ ] Qwen3-8B    — dense-qknorm diagram; all blocks render; no text overflow
+  [ ] Qwen3-30B-A3B — moe-qknorm; router + FusedMoE branch visible; bracket label correct
+  [ ] DeepSeek-V3 — mla-moe; Q/KV down-proj (A) + up-proj (B) terse labels; MLA attention label;
+                    dense layer × 3 group + MoE layer × 58 group; shared expert FFN visible
+  [ ] Lens system: Flow / Shapes / Compute / Memory recompute metrics; token slider updates values
+  [ ] Block drawer: symbol, ref (GitHub link), desc, note shown on click; sticky on scroll
+  [ ] Keyboard: Tab/Enter/Space reach every circuit node; cross-link to Component mode works
+
+R1–R4 pillar checks:
+  [ ] R1 no-overflow: run build_model_arch.py + audit script; "All blocks fit: YES"
+  [ ] R1 label budget: no block label > 24 chars across all 4 model manifests
+  [ ] R3 keyboard: every interactive element reachable and operable without pointer
+  [ ] R4 reduced-motion: with prefers-reduced-motion:reduce, flow ticks are frozen/hidden
+  [ ] R4 focus-visible: 3px outline visible on Tab for all diagram nodes and switcher pills
 EOF
 }
 

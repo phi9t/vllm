@@ -98,6 +98,43 @@ Canonical structure in [`src/App.tsx`](src/App.tsx):
   comment. The shared lens formatter `lensMetric()` lives in `blockTypes.ts` so both the
   explorer panel and the width-measurement code use identical formatting.
 
+  **Succinct block text (R1 companion rule).** Block labels must be terse — target ≤ ~22 chars,
+  hard ceiling 24. Prefer the short symbol form: `Q down-proj (A)`, `MLA attention`,
+  `QKV projection`, `Gate+Up projection`. Full prose belongs in the `desc` (and `note`) fields,
+  which appear in the detail drawer — never on the block face. Generators in `scripts/` must
+  respect this budget; the no-overflow audit in
+  [`GENERALIZATION_WORKFLOW.md`](GENERALIZATION_WORKFLOW.md) §5 checks both length and computed
+  fit for every block in every manifest.
+
+## Aesthetics and interactability checklists
+
+For the full R1–R8 spec (no overflow, aesthetics, interactability, accessibility, data-driven
+contract, portability, state model, generality) see
+[`GENERALIZATION_WORKFLOW.md`](GENERALIZATION_WORKFLOW.md).
+
+### Aesthetics (R2) — Observatory glass kit
+- Kind-tinted gradient card fills (`url(#grad-<kind>)`) + kind tags (upper-right corner).
+- Slim accent bar: 3 px left edge rect in `KIND_COLOR[kind]`.
+- Rounded-elbow wiring: `roundedOrthPath` with r=12 on all branch wires.
+- Gradient mainline (`rail-grad` indigo→cyan) + animated flow ticks (6 circles, staggered).
+- Cyan selection glow: `stroke=#38bdf8`, `strokeWidth=2` on selected node border.
+- Tinted branch panels: `fillOpacity=0.05`, accent stroke `strokeOpacity=0.22`.
+- Header pills on branch panels: near-black fill, accent stroke.
+- Comfort margins: `COMFORT=16`, `PAD_L=16`, `PAD_R=14`, `PRENORM_GAP=16`.
+- Body-text scale: label 12 px mono 600; metric 9 px mono; kind tag 7.5 px.
+- `maxWidth`-capped SVG (`style={{ maxWidth: VIEW_W * 1.12 }}`).
+- Dark-only: `color-scheme: dark`; no light-theme variants.
+- New views reuse the kit — no bespoke style sheets.
+
+### Interactability (R3) — every node operable
+- Every node: `role="button"`, `tabIndex={0}`, Enter+Space call `onSelect`.
+- Selection opens a sticky detail drawer: `symbol`, `ref` (live GitHub link via `sourceUrl`),
+  `desc`, `note`.
+- Subject switcher pill tablist (`role="tablist"` / `role="tab"`, `aria-selected`).
+- Lens selector + token slider as param controls.
+- Cross-links between modes (Architecture ↔ Component ↔ Data).
+- Clear hover/focus affordances: surface lift on hover, `:focus-visible` 3 px cyan.
+
 ## Building a new explorer mode
 
 1. Add a `family` id + entry to `FAMILIES` in `App.tsx`.

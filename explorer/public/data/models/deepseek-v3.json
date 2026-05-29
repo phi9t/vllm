@@ -58,11 +58,11 @@
             {
               "id": "q_a",
               "type": "q_a_linear",
-              "label": "Q latent projection (A)",
+              "label": "Q down-proj (A)",
               "symbol": "ReplicatedLinear (q_a_proj)",
               "ref": "vllm/model_executor/models/deepseek_v2.py:448",
               "kind": "latent",
-              "desc": "Projects hidden_size \u2192 q_lora_rank (low-rank latent for queries)."
+              "desc": "Q latent projection (A): projects hidden_size \u2192 q_lora_rank, compressing queries into a low-rank latent space (MLA down-projection)."
             },
             {
               "id": "q_a_norm",
@@ -76,20 +76,20 @@
             {
               "id": "q_b",
               "type": "q_b_linear",
-              "label": "Q decompression projection (B)",
+              "label": "Q up-proj (B)",
               "symbol": "ColumnParallelLinear (q_b_proj)",
               "ref": "vllm/model_executor/models/deepseek_v2.py:456",
               "kind": "latent",
-              "desc": "Decompresses q_lora_rank \u2192 H\u00b7(qk_nope_head_dim + qk_rope_head_dim)."
+              "desc": "Q decompression projection (B): decompresses q_lora_rank \u2192 H\u00b7(qk_nope_head_dim + qk_rope_head_dim), expanding queries back to full multi-head dimension (MLA up-projection)."
             },
             {
               "id": "kv_a",
               "type": "kv_a_linear",
-              "label": "KV latent projection (A)",
+              "label": "KV down-proj (A)",
               "symbol": "ReplicatedLinear (kv_a_proj_with_mqa)",
               "ref": "vllm/model_executor/models/deepseek_v2.py:472",
               "kind": "latent",
-              "desc": "Projects hidden_size \u2192 kv_lora_rank + qk_rope_head_dim (latent + decoupled RoPE key)."
+              "desc": "KV latent projection (A): projects hidden_size \u2192 kv_lora_rank + qk_rope_head_dim, compressing keys/values into a shared low-rank latent plus a decoupled RoPE key (MLA down-projection)."
             },
             {
               "id": "kv_a_norm",
@@ -103,11 +103,11 @@
             {
               "id": "kv_b",
               "type": "kv_b_linear",
-              "label": "KV decompression projection (B)",
+              "label": "KV up-proj (B)",
               "symbol": "ColumnParallelLinear (kv_b_proj)",
               "ref": "vllm/model_executor/models/deepseek_v2.py:480",
               "kind": "latent",
-              "desc": "Decompresses kv_lora_rank \u2192 H\u00b7(qk_nope_head_dim + v_head_dim)."
+              "desc": "KV decompression projection (B): decompresses kv_lora_rank \u2192 H\u00b7(qk_nope_head_dim + v_head_dim), reconstructing full key/value heads for attention (MLA up-projection)."
             },
             {
               "id": "rope",
@@ -122,11 +122,11 @@
             {
               "id": "attn",
               "type": "attention_mla",
-              "label": "MLA Attention (paged KV)",
+              "label": "MLA attention",
               "symbol": "Attention.forward",
               "ref": "vllm/model_executor/layers/attention/attention.py:409",
               "kind": "attn",
-              "desc": "Scaled dot-product attention with compressed KV cache. KV cache stores latent (kv_lora_rank+qk_rope_head_dim) per token.",
+              "desc": "MLA Attention (paged KV): scaled dot-product attention with compressed KV cache. KV cache stores the latent vector (kv_lora_rank + qk_rope_head_dim dims) per token \u2014 far smaller than GQA.",
               "note": "KV cache is (kvl+qr)\u00b7bytes per token \u2014 far smaller than GQA."
             },
             {
@@ -204,11 +204,11 @@
             {
               "id": "q_a",
               "type": "q_a_linear",
-              "label": "Q latent projection (A)",
+              "label": "Q down-proj (A)",
               "symbol": "ReplicatedLinear (q_a_proj)",
               "ref": "vllm/model_executor/models/deepseek_v2.py:448",
               "kind": "latent",
-              "desc": "Projects hidden_size \u2192 q_lora_rank (low-rank latent for queries)."
+              "desc": "Q latent projection (A): projects hidden_size \u2192 q_lora_rank, compressing queries into a low-rank latent space (MLA down-projection)."
             },
             {
               "id": "q_a_norm",
@@ -222,20 +222,20 @@
             {
               "id": "q_b",
               "type": "q_b_linear",
-              "label": "Q decompression projection (B)",
+              "label": "Q up-proj (B)",
               "symbol": "ColumnParallelLinear (q_b_proj)",
               "ref": "vllm/model_executor/models/deepseek_v2.py:456",
               "kind": "latent",
-              "desc": "Decompresses q_lora_rank \u2192 H\u00b7(qk_nope_head_dim + qk_rope_head_dim)."
+              "desc": "Q decompression projection (B): decompresses q_lora_rank \u2192 H\u00b7(qk_nope_head_dim + qk_rope_head_dim), expanding queries back to full multi-head dimension (MLA up-projection)."
             },
             {
               "id": "kv_a",
               "type": "kv_a_linear",
-              "label": "KV latent projection (A)",
+              "label": "KV down-proj (A)",
               "symbol": "ReplicatedLinear (kv_a_proj_with_mqa)",
               "ref": "vllm/model_executor/models/deepseek_v2.py:472",
               "kind": "latent",
-              "desc": "Projects hidden_size \u2192 kv_lora_rank + qk_rope_head_dim (latent + decoupled RoPE key)."
+              "desc": "KV latent projection (A): projects hidden_size \u2192 kv_lora_rank + qk_rope_head_dim, compressing keys/values into a shared low-rank latent plus a decoupled RoPE key (MLA down-projection)."
             },
             {
               "id": "kv_a_norm",
@@ -249,11 +249,11 @@
             {
               "id": "kv_b",
               "type": "kv_b_linear",
-              "label": "KV decompression projection (B)",
+              "label": "KV up-proj (B)",
               "symbol": "ColumnParallelLinear (kv_b_proj)",
               "ref": "vllm/model_executor/models/deepseek_v2.py:480",
               "kind": "latent",
-              "desc": "Decompresses kv_lora_rank \u2192 H\u00b7(qk_nope_head_dim + v_head_dim)."
+              "desc": "KV decompression projection (B): decompresses kv_lora_rank \u2192 H\u00b7(qk_nope_head_dim + v_head_dim), reconstructing full key/value heads for attention (MLA up-projection)."
             },
             {
               "id": "rope",
@@ -268,11 +268,11 @@
             {
               "id": "attn",
               "type": "attention_mla",
-              "label": "MLA Attention (paged KV)",
+              "label": "MLA attention",
               "symbol": "Attention.forward",
               "ref": "vllm/model_executor/layers/attention/attention.py:409",
               "kind": "attn",
-              "desc": "Scaled dot-product attention with compressed KV cache. KV cache stores latent (kv_lora_rank+qk_rope_head_dim) per token.",
+              "desc": "MLA Attention (paged KV): scaled dot-product attention with compressed KV cache. KV cache stores the latent vector (kv_lora_rank + qk_rope_head_dim dims) per token \u2014 far smaller than GQA.",
               "note": "KV cache is (kvl+qr)\u00b7bytes per token \u2014 far smaller than GQA."
             },
             {
