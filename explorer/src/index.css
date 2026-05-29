@@ -1,0 +1,342 @@
+@import 'tailwindcss';
+
+/* =============================================================================
+   vLLM Explorer — Global Style System
+   Distilled "Observatory" design language (see EXPLORER_DESIGN.md).
+   Tokens reconcile the clinique/muon twins' indigo palette with Lumina's
+   semantic accents, expressed via Tailwind 4 @theme so they also generate
+   utilities (bg-primary, text-cyan, border-panelborder, ...).
+   ============================================================================= */
+
+@theme {
+  /* Fonts — Inter for prose/data, Fira Code for code/architecture */
+  --font-sans:
+    'Inter Variable', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono:
+    'Fira Code Variable', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Surfaces (dark void + glassmorphic panels) */
+  --color-void: #0b0f19;
+  --color-void-deep: #070a13;
+  --color-panel: rgba(17, 24, 39, 0.75);
+  --color-panel-hover: rgba(31, 41, 55, 0.85);
+  --color-panelborder: rgba(255, 255, 255, 0.08);
+  --color-panelborder-active: rgba(99, 102, 241, 0.4);
+
+  /* Text */
+  --color-ink: #f3f4f6;
+  --color-ink-soft: #9ca3af;
+  --color-ink-muted: #6b7280;
+
+  /* Accents (shared across both lineages) */
+  --color-primary: #6366f1; /* indigo */
+  --color-secondary: #8b5cf6; /* violet */
+  --color-cyan: #38bdf8; /* sky cyan */
+  --color-info: #06b6d4;
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-danger: #ef4444;
+
+  /* Radii */
+  --radius-badge: 6px;
+  --radius-btn: 8px;
+  --radius-panel: 12px;
+  --radius-card: 16px;
+}
+
+/* Non-Tailwind helper variables (glows, scrollbars) */
+:root {
+  --glow-primary: rgba(99, 102, 241, 0.15);
+  --glow-secondary: rgba(139, 92, 246, 0.15);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.15);
+  --scrollbar-track: var(--color-void);
+
+  color-scheme: dark;
+  accent-color: var(--color-primary);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-sans);
+  background-color: var(--color-void);
+  color: var(--color-ink);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* -----------------------------------------------------------------------------
+   Observatory background — fixed radial-gradient layer (present in both lineages)
+   ----------------------------------------------------------------------------- */
+.observatory-bg {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  background:
+    radial-gradient(circle at 10% 20%, rgba(99, 102, 241, 0.08) 0%, transparent 40%),
+    radial-gradient(circle at 90% 80%, rgba(139, 92, 246, 0.08) 0%, transparent 40%),
+    var(--color-void-deep);
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* -----------------------------------------------------------------------------
+   App shell — centered container + family-switcher header
+   ----------------------------------------------------------------------------- */
+.explorer-container {
+  position: relative;
+  z-index: 10;
+  max-width: 1600px;
+  margin: 0 auto;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  min-height: 100vh;
+}
+
+.explorer-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 24px;
+  align-items: flex-end;
+  justify-content: space-between;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--color-panelborder);
+}
+
+.header-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.explorer-header h1 {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  background: linear-gradient(120deg, var(--color-ink) 30%, var(--color-cyan));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.explorer-header p {
+  margin: 6px 0 0;
+  color: var(--color-ink-soft);
+  font-size: 14px;
+}
+
+.back-home-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--color-ink-muted);
+  font-size: 12px;
+  text-decoration: none;
+  margin-bottom: 8px;
+}
+.back-home-link:hover {
+  color: var(--color-cyan);
+}
+
+.family-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.family-switch-btn {
+  appearance: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-ink-soft);
+  background: var(--color-panel);
+  border: 1px solid var(--color-panelborder);
+  border-radius: var(--radius-btn);
+  padding: 8px 16px;
+  backdrop-filter: blur(12px);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.family-switch-btn:hover {
+  background: var(--color-panel-hover);
+  color: var(--color-ink);
+}
+.family-switch-btn.active {
+  color: #fff;
+  border-color: var(--color-panelborder-active);
+  background: linear-gradient(120deg, var(--color-primary), var(--color-secondary));
+  box-shadow: 0 0 15px var(--glow-primary);
+}
+
+/* -----------------------------------------------------------------------------
+   Panel / card primitives (glassmorphism)
+   ----------------------------------------------------------------------------- */
+.panel {
+  background: var(--color-panel);
+  border: 1px solid var(--color-panelborder);
+  border-radius: var(--radius-panel);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 1024px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* -----------------------------------------------------------------------------
+   Accessibility — skip link + focus + screen-reader-only
+   ----------------------------------------------------------------------------- */
+.skip-link {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  z-index: 100;
+  background: var(--color-primary);
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: var(--radius-btn);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+}
+.skip-link:not(:focus-visible) {
+  position: absolute !important;
+  clip-path: inset(50%) !important;
+  overflow: hidden !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  white-space: nowrap !important;
+}
+
+.visually-hidden:where(:not(:focus-within, :active)) {
+  position: absolute !important;
+  clip-path: inset(50%) !important;
+  overflow: hidden !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  border: 0 !important;
+  white-space: nowrap !important;
+}
+
+:where(a:any-link, button, input, select, textarea, [tabindex='0']):focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* -----------------------------------------------------------------------------
+   Scrollbars
+   ----------------------------------------------------------------------------- */
+* {
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-width: thin;
+}
+
+/* -----------------------------------------------------------------------------
+   Code / token rendering (Data mode tokenization view)
+   ----------------------------------------------------------------------------- */
+.mono {
+  font-family: var(--font-mono);
+  font-feature-settings: 'calt' 1, 'liga' 1;
+}
+
+.token-piece {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 1px 2px;
+  border-radius: 3px;
+  border: 1px solid var(--color-panelborder);
+  background: rgba(99, 102, 241, 0.08);
+  white-space: pre;
+}
+.token-piece--space {
+  background: rgba(56, 189, 248, 0.1);
+  color: var(--color-cyan);
+}
+.token-piece--newline {
+  background: rgba(139, 92, 246, 0.12);
+  color: var(--color-secondary);
+}
+.token-piece--special {
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--color-warning);
+}
+
+/* -----------------------------------------------------------------------------
+   SVG diagram primitives (Component graph + Qwen3 architecture)
+   ----------------------------------------------------------------------------- */
+.diagram-node {
+  cursor: pointer;
+  transition: filter 0.2s ease;
+}
+.diagram-node:hover {
+  filter: drop-shadow(0 0 6px rgba(56, 189, 248, 0.35));
+}
+.diagram-node.active rect,
+.diagram-node.active circle {
+  stroke: var(--color-cyan);
+  stroke-width: 2.5;
+}
+.diagram-edge {
+  stroke: rgba(148, 163, 184, 0.5);
+  stroke-width: 1.5;
+  fill: none;
+}
+.diagram-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  fill: var(--color-ink);
+  pointer-events: none;
+}
+
+/* -----------------------------------------------------------------------------
+   Detail drawer (Component + Architecture modes)
+   ----------------------------------------------------------------------------- */
+.drawer {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+}
+.drawer code,
+.code-ref {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--color-cyan);
+  background: rgba(56, 189, 248, 0.08);
+  border-radius: 4px;
+  padding: 1px 5px;
+}

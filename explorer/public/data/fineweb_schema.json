@@ -1,0 +1,60 @@
+{
+  "dataset": "HuggingFaceFW/fineweb-edu",
+  "columns": [
+    {
+      "name": "text",
+      "type": "string",
+      "desc": "The extracted, cleaned web-page text."
+    },
+    {
+      "name": "id",
+      "type": "string",
+      "desc": "Stable per-document identifier."
+    },
+    {
+      "name": "dump",
+      "type": "string",
+      "desc": "CommonCrawl dump the doc came from (e.g. CC-MAIN-2024-10)."
+    },
+    {
+      "name": "url",
+      "type": "string",
+      "desc": "Source URL of the page."
+    },
+    {
+      "name": "date",
+      "type": "string",
+      "desc": "Crawl date."
+    },
+    {
+      "name": "file_path",
+      "type": "string",
+      "desc": "Path of the source WARC/parquet shard."
+    },
+    {
+      "name": "language",
+      "type": "string",
+      "desc": "Detected language code (this subset is 'en')."
+    },
+    {
+      "name": "language_score",
+      "type": "float",
+      "desc": "fastText language-ID confidence (0-1)."
+    },
+    {
+      "name": "token_count",
+      "type": "int",
+      "desc": "Token count per the GPT-2 tokenizer (dataset-provided)."
+    },
+    {
+      "name": "score",
+      "type": "float",
+      "desc": "Edu-quality classifier score (raw, ~0-5)."
+    },
+    {
+      "name": "int_score",
+      "type": "int",
+      "desc": "Rounded integer edu score used for filtering."
+    }
+  ]
+}

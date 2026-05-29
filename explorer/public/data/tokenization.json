@@ -1,0 +1,1705 @@
+{
+  "tokenizer": "Qwen/Qwen3-0.6B",
+  "tokenizer_source": "qwen3",
+  "note": "dataset_token_count is computed by fineweb-edu with the GPT-2 tokenizer; qwen3_token_count is recomputed here with the Qwen3 tokenizer.",
+  "samples": [
+    {
+      "id": "<urn:uuid:0001>",
+      "text": "Photosynthesis is the process by which green plants and some other organisms use sunlight to synthesize foods from carbon dioxide and water. In plants, photosynthesis generally takes place in the leaves, inside organelles called chloroplasts. The overall reaction converts light e",
+      "tokens": [
+        {
+          "id": 31772,
+          "text": "Photos",
+          "special": false
+        },
+        {
+          "id": 73667,
+          "text": "ynthesis",
+          "special": false
+        },
+        {
+          "id": 374,
+          "text": " is",
+          "special": false
+        },
+        {
+          "id": 279,
+          "text": " the",
+          "special": false
+        },
+        {
+          "id": 1882,
+          "text": " process",
+          "special": false
+        },
+        {
+          "id": 553,
+          "text": " by",
+          "special": false
+        },
+        {
+          "id": 892,
+          "text": " which",
+          "special": false
+        },
+        {
+          "id": 6176,
+          "text": " green",
+          "special": false
+        },
+        {
+          "id": 10779,
+          "text": " plants",
+          "special": false
+        },
+        {
+          "id": 323,
+          "text": " and",
+          "special": false
+        },
+        {
+          "id": 1045,
+          "text": " some",
+          "special": false
+        },
+        {
+          "id": 1008,
+          "text": " other",
+          "special": false
+        },
+        {
+          "id": 43204,
+          "text": " organisms",
+          "special": false
+        },
+        {
+          "id": 990,
+          "text": " use",
+          "special": false
+        },
+        {
+          "id": 39020,
+          "text": " sunlight",
+          "special": false
+        },
+        {
+          "id": 311,
+          "text": " to",
+          "special": false
+        },
+        {
+          "id": 6782,
+          "text": " syn",
+          "special": false
+        },
+        {
+          "id": 26887,
+          "text": "thesize",
+          "special": false
+        },
+        {
+          "id": 15298,
+          "text": " foods",
+          "special": false
+        },
+        {
+          "id": 504,
+          "text": " from",
+          "special": false
+        },
+        {
+          "id": 12499,
+          "text": " carbon",
+          "special": false
+        },
+        {
+          "id": 39489,
+          "text": " dioxide",
+          "special": false
+        },
+        {
+          "id": 323,
+          "text": " and",
+          "special": false
+        },
+        {
+          "id": 3015,
+          "text": " water",
+          "special": false
+        },
+        {
+          "id": 13,
+          "text": ".",
+          "special": false
+        },
+        {
+          "id": 758,
+          "text": " In",
+          "special": false
+        },
+        {
+          "id": 10779,
+          "text": " plants",
+          "special": false
+        },
+        {
+          "id": 11,
+          "text": ",",
+          "special": false
+        },
+        {
+          "id": 7249,
+          "text": " photos",
+          "special": false
+        },
+        {
+          "id": 73667,
+          "text": "ynthesis",
+          "special": false
+        },
+        {
+          "id": 8789,
+          "text": " generally",
+          "special": false
+        },
+        {
+          "id": 4990,
+          "text": " takes",
+          "special": false
+        },
+        {
+          "id": 1992,
+          "text": " place",
+          "special": false
+        },
+        {
+          "id": 304,
+          "text": " in",
+          "special": false
+        },
+        {
+          "id": 279,
+          "text": " the",
+          "special": false
+        },
+        {
+          "id": 10901,
+          "text": " leaves",
+          "special": false
+        },
+        {
+          "id": 11,
+          "text": ",",
+          "special": false
+        },
+        {
+          "id": 4766,
+          "text": " inside",
+          "special": false
+        },
+        {
+          "id": 1240,
+          "text": " org",
+          "special": false
+        },
+        {
+          "id": 2387,
+          "text": "anel",
+          "special": false
+        },
+        {
+          "id": 642,
+          "text": "les",
+          "special": false
+        },
+        {
+          "id": 2598,
+          "text": " called",
+          "special": false
+        },
+        {
+          "id": 36733,
+          "text": " chlor",
+          "special": false
+        },
+        {
+          "id": 91235,
+          "text": "oplast",
+          "special": false
+        },
+        {
+          "id": 82,
+          "text": "s",
+          "special": false
+        },
+        {
+          "id": 13,
+          "text": ".",
+          "special": false
+        },
+        {
+          "id": 576,
+          "text": " The",
+          "special": false
+        },
+        {
+          "id": 8084,
+          "text": " overall",
+          "special": false
+        },
+        {
+          "id": 12720,
+          "text": " reaction",
+          "special": false
+        },
+        {
+          "id": 32722,
+          "text": " converts",
+          "special": false
+        },
+        {
+          "id": 3100,
+          "text": " light",
+          "special": false
+        },
+        {
+          "id": 384,
+          "text": " e",
+          "special": false
+        }
+      ],
+      "qwen3_token_count": 52,
+      "dataset_token_count": 64
+    },
+    {
+      "id": "<urn:uuid:0002>",
+      "text": "The French Revolution was a period of radical political and societal change in France that began with the Estates General of 1789 and ended with the formation of the French Consulate in November 1799. Many of its ideas are considered fundamental principles of liberal democracy.",
+      "tokens": [
+        {
+          "id": 785,
+          "text": "The",
+          "special": false
+        },
+        {
+          "id": 8585,
+          "text": " French",
+          "special": false
+        },
+        {
+          "id": 22126,
+          "text": " Revolution",
+          "special": false
+        },
+        {
+          "id": 572,
+          "text": " was",
+          "special": false
+        },
+        {
+          "id": 264,
+          "text": " a",
+          "special": false
+        },
+        {
+          "id": 4168,
+          "text": " period",
+          "special": false
+        },
+        {
+          "id": 315,
+          "text": " of",
+          "special": false
+        },
+        {
+          "id": 17855,
+          "text": " radical",
+          "special": false
+        },
+        {
+          "id": 4948,
+          "text": " political",
+          "special": false
+        },
+        {
+          "id": 323,
+          "text": " and",
+          "special": false
+        },
+        {
+          "id": 58429,
+          "text": " societal",
+          "special": false
+        },
+        {
+          "id": 2297,
+          "text": " change",
+          "special": false
+        },
+        {
+          "id": 304,
+          "text": " in",
+          "special": false
+        },
+        {
+          "id": 9625,
+          "text": " France",
+          "special": false
+        },
+        {
+          "id": 429,
+          "text": " that",
+          "special": false
+        },
+        {
+          "id": 6009,
+          "text": " began",
+          "special": false
+        },
+        {
+          "id": 448,
+          "text": " with",
+          "special": false
+        },
+        {
+          "id": 279,
+          "text": " the",
+          "special": false
+        },
+        {
+          "id": 91600,
+          "text": " Estates",
+          "special": false
+        },
+        {
+          "id": 3251,
+          "text": " General",
+          "special": false
+        },
+        {
+          "id": 315,
+          "text": " of",
+          "special": false
+        },
+        {
+          "id": 220,
+          "text": " ",
+          "special": false
+        },
+        {
+          "id": 16,
+          "text": "1",
+          "special": false
+        },
+        {
+          "id": 22,
+          "text": "7",
+          "special": false
+        },
+        {
+          "id": 23,
+          "text": "8",
+          "special": false
+        },
+        {
+          "id": 24,
+          "text": "9",
+          "special": false
+        },
+        {
+          "id": 323,
+          "text": " and",
+          "special": false
+        },
+        {
+          "id": 9482,
+          "text": " ended",
+          "special": false
+        },
+        {
+          "id": 448,
+          "text": " with",
+          "special": false
+        },
+        {
+          "id": 279,
+          "text": " the",
+          "special": false
+        },
+        {
+          "id": 18003,
+          "text": " formation",
+          "special": false
+        },
+        {
+          "id": 315,
+          "text": " of",
+          "special": false
+        },
+        {
+          "id": 279,
+          "text": " the",
+          "special": false
+        },
+        {
+          "id": 8585,
+          "text": " French",
+          "special": false
+        },
+        {
+          "id": 7292,
+          "text": " Cons",
+          "special": false
+        },
+        {
+          "id": 6334,
+          "text": "ulate",
+          "special": false
+        },
+        {
+          "id": 304,
+          "text": " in",
+          "special": false
+        },
+        {
+          "id": 6702,
+          "text": " November",
+          "special": false
+        },
+        {
+          "id": 220,
+          "text": " ",
+          "special": false
+        },
+        {
+          "id": 16,
+          "text": "1",
+          "special": false
+        },
+        {
+          "id": 22,
+          "text": "7",
+          "special": false
+        },
+        {
+          "id": 24,
+          "text": "9",
+          "special": false
+        },
+        {
+          "id": 24,
+          "text": "9",
+          "special": false
+        },
+        {
+          "id": 13,
+          "text": ".",
+          "special": false
+        },
+        {
+          "id": 8999,
+          "text": " Many",
+          "special": false
+        },
+        {
+          "id": 315,
+          "text": " of",
+          "special": false
+        },
+        {
+          "id": 1181,
+          "text": " its",
+          "special": false
+        },
+        {
+          "id": 6708,
+          "text": " ideas",
+          "special": false
+        },
+        {
+          "id": 525,
+          "text": " are",
+          "special": false
+        },
+        {
+          "id": 6509,
+          "text": " considered",
+          "special": false
+        },
+        {
+          "id": 15811,
+          "text": " fundamental",
+          "special": false
+        },
+        {
+          "id": 16170,
+          "text": " principles",
+          "special": false
+        },
+        {
+          "id": 315,
+          "text": " of",
+          "special": false
+        },
+        {
+          "id": 17775,
+          "text": " liberal",
+          "special": false
+        },
+        {
+          "id": 19525,
+          "text": " democracy",
+          "special": false
+        },
+        {
+          "id": 13,
+          "text": ".",
+          "special": false
+        }
+      ],
+      "qwen3_token_count": 56,
+      "dataset_token_count": 52
+    },
+    {
+      "id": "<urn:uuid:0003>",
+      "text": "A prime number is a natural number greater than 1 that is not a product of two smaller natural numbers. The first few primes are 2, 3, 5, 7, 11 and 13. The fundamental theorem of arithmetic establishes the central role of primes in number theory: every integer greater than 1 is e",
+      "tokens": [
+        {
+          "id": 32,
+          "text": "A",
+          "special": false
+        },
+        {
+          "id": 10250,
+          "text": " prime",
+          "special": false
+        },
+        {
+          "id": 1372,
+          "text": " number",
+          "special": false
+        },
+        {
+          "id": 374,
+          "text": " is",
+          "special": false
+        },
+        {
+          "id": 264,
+          "text": " a",
+          "special": false
+        },
+        {
+          "id": 5810,
+          "text": " natural",
+          "special": false
+        },
+        {
+          "id": 1372,
+          "text": " number",
+          "special": false
+        },
+        {
+          "id": 7046,
+          "text": " greater",
+          "special": false
+        },
+        {
+          "id": 1091,
+          "text": " than",
+          "special": false
+        },
+        {
+          "id": 220,
+          "text": " ",
+          "special": false
+        },
+        {
+          "id": 16,
+          "text": "1",
+          "special": false
+        },
+        {
+          "id": 429,
+          "text": " that",
+          "special": false
+        },
+        {
+          "id": 374,
+          "text": " is",
+          "special": false
+        },
+        {
+          "id": 537,
+          "text": " not",
+          "special": false
+        },
+        {
+          "id": 264,
+          "text": " a",
+          "special": false
+        },
+        {
+          "id": 1985,
+          "text": " product",
+          "special": false
+        },
+        {
+          "id": 315,
+          "text": " of",
+          "special": false
+        },
+        {
+          "id": 1378,
+          "text": " two",
+          "special": false
+        },
+        {
+          "id": 9155,
+          "text": " smaller",
+          "special": false
+        },
+        {
+          "id": 5810,
+          "text": " natural",
+          "special": false
+        },
+        {
+          "id": 5109,
+          "text": " numbers",
+          "special": false
+        },
+        {
+          "id": 13,
+          "text": ".",
+          "special": false
+        },
+        {
+          "id": 576,
+          "text": " The",
+          "special": false
+        },
+        {
+          "id": 1156,
+          "text": " first",
+          "special": false
+        },
+        {
+          "id": 2421,
+          "text": " few",
+          "special": false
+        },
+        {
+          "id": 49433,
+          "text": " primes",
+          "special": false
+        },
+        {
+          "id": 525,
+          "text": " are",
+          "special": false
+        },
+        {
+          "id": 220,
+          "text": " ",
+          "special": false
+        },
+        {
+          "id": 17,
+          "text": "2",
+          "special": false
+        },
+        {
+          "id": 11,
+          "text": ",",
+          "special": false
+        },
+        {
+          "id": 220,
+          "text": " ",
+          "special": false
+        },
+        {
+          "id": 18,
+          "text": "3",
+          "special": false
+        },
+        {
+          "id": 11,
+          "text": ",",
+          "special": false
+        },
+        {
+          "id": 220,
+          "text": " ",
+          "special": false
+        },
+        {
+          "id": 20,
+          "text": "5",
+          "special": false
+        },
+        {
+          "id": 11,
+          "text": ",",
+          "special": false
+        },
+        {
+          "id": 220,
+          "text": " ",
+          "special": false
+        },
+        {
+          "id": 22,
+          "text": "7",
+          "special": false
+        },
+        {
+          "id": 11,
+          "text": ",",
+          "special": false
+        },
+        {
+          "id": 220,
+          "text": " ",
+          "special": false
+        },
+        {
+          "id": 16,
+          "text": "1",
+          "special": false
+        },
+        {
+          "id": 16,
+          "text": "1",
+          "special": false
+        },
+        {
+          "id": 323,
+          "text": " and",
+          "special": false
+        },
+        {
+          "id": 220,
+          "text": " ",
+          "special": false
+        },
+        {
+          "id": 16,
+          "text": "1",
+          "special": false
+        },
+        {
+          "id": 18,
+          "text": "3",
+          "special": false
+        },
+        {
+          "id": 13,
+          "text": ".",
+          "special": false
+        },
+        {
+          "id": 576,
+          "text": " The",
+          "special": false
+        },
+        {
+          "id": 15811,
+          "text": " fundamental",
+          "special": false
+        },
+        {
+          "id": 57817,
+          "text": " theorem",
+          "special": false
+        },
+        {
+          "id": 315,
+          "text": " of",
+          "special": false
+        },
+        {
+          "id": 34784,
+          "text": " arithmetic",
+          "special": false
+        },
+        {
+          "id": 63564,
+          "text": " establishes",
+          "special": false
+        },
+        {
+          "id": 279,
+          "text": " the",
+          "special": false
+        },
+        {
+          "id": 8622,
+          "text": " central",
+          "special": false
+        },
+        {
+          "id": 3476,
+          "text": " role",
+          "special": false
+        },
+        {
+          "id": 315,
+          "text": " of",
+          "special": false
+        },
+        {
+          "id": 49433,
+          "text": " primes",
+          "special": false
+        },
+        {
+          "id": 304,
+          "text": " in",
+          "special": false
+        },
+        {
+          "id": 1372,
+          "text": " number",
+          "special": false
+        },
+        {
+          "id": 10126,
+          "text": " theory",
+          "special": false
+        },
+        {
+          "id": 25,
+          "text": ":",
+          "special": false
+        },
+        {
+          "id": 1449,
+          "text": " every",
+          "special": false
+        },
+        {
+          "id": 7546,
+          "text": " integer",
+          "special": false
+        },
+        {
+          "id": 7046,
+          "text": " greater",
+          "special": false
+        },
+        {
+          "id": 1091,
+          "text": " than",
+          "special": false
+        },
+        {
+          "id": 220,
+          "text": " ",
+          "special": false
+        },
+        {
+          "id": 16,
+          "text": "1",
+          "special": false
+        },
+        {
+          "id": 374,
+          "text": " is",
+          "special": false
+        },
+        {
+          "id": 384,
+          "text": " e",
+          "special": false
+        }
+      ],
+      "qwen3_token_count": 70,
+      "dataset_token_count": 71
+    },
+    {
+      "id": "<urn:uuid:0004>",
+      "text": "Newton's laws of motion are three basic laws of classical mechanics that describe the relationship between the motion of an object and the forces acting on it. The first law states that an object remains at rest or in uniform motion unless acted upon by a net external force.",
+      "tokens": [
+        {
+          "id": 76377,
+          "text": "Newton",
+          "special": false
+        },
+        {
+          "id": 594,
+          "text": "'s",
+          "special": false
+        },
+        {
+          "id": 6872,
+          "text": " laws",
+          "special": false
+        },
+        {
+          "id": 315,
+          "text": " of",
+          "special": false
+        },
+        {
+          "id": 11379,
+          "text": " motion",
+          "special": false
+        },
+        {
+          "id": 525,
+          "text": " are",
+          "special": false
+        },
+        {
+          "id": 2326,
+          "text": " three",
+          "special": false
+        },
+        {
+          "id": 6770,
+          "text": " basic",
+          "special": false
+        },
+        {
+          "id": 6872,
+          "text": " laws",
+          "special": false
+        },
+        {
+          "id": 315,
+          "text": " of",
+          "special": false
+        },
+        {
+          "id": 28824,
+          "text": " classical",
+          "special": false
+        },
+        {
+          "id": 29026,
+          "text": " mechanics",
+          "special": false
+        },
+        {
+          "id": 429,
+          "text": " that",
+          "special": false
+        },
+        {
+          "id": 7512,
+          "text": " describe",
+          "special": false
+        },
+        {
+          "id": 279,
+          "text": " the",
+          "special": false
+        },
+        {
+          "id": 5025,
+          "text": " relationship",
+          "special": false
+        },
+        {
+          "id": 1948,
+          "text": " between",
+          "special": false
+        },
+        {
+          "id": 279,
+          "text": " the",
+          "special": false
+        },
+        {
+          "id": 11379,
+          "text": " motion",
+          "special": false
+        },
+        {
+          "id": 315,
+          "text": " of",
+          "special": false
+        },
+        {
+          "id": 458,
+          "text": " an",
+          "special": false
+        },
+        {
+          "id": 1633,
+          "text": " object",
+          "special": false
+        },
+        {
+          "id": 323,
+          "text": " and",
+          "special": false
+        },
+        {
+          "id": 279,
+          "text": " the",
+          "special": false
+        },
+        {
+          "id": 8437,
+          "text": " forces",
+          "special": false
+        },
+        {
+          "id": 15358,
+          "text": " acting",
+          "special": false
+        },
+        {
+          "id": 389,
+          "text": " on",
+          "special": false
+        },
+        {
+          "id": 432,
+          "text": " it",
+          "special": false
+        },
+        {
+          "id": 13,
+          "text": ".",
+          "special": false
+        },
+        {
+          "id": 576,
+          "text": " The",
+          "special": false
+        },
+        {
+          "id": 1156,
+          "text": " first",
+          "special": false
+        },
+        {
+          "id": 2329,
+          "text": " law",
+          "special": false
+        },
+        {
+          "id": 5302,
+          "text": " states",
+          "special": false
+        },
+        {
+          "id": 429,
+          "text": " that",
+          "special": false
+        },
+        {
+          "id": 458,
+          "text": " an",
+          "special": false
+        },
+        {
+          "id": 1633,
+          "text": " object",
+          "special": false
+        },
+        {
+          "id": 8458,
+          "text": " remains",
+          "special": false
+        },
+        {
+          "id": 518,
+          "text": " at",
+          "special": false
+        },
+        {
+          "id": 2732,
+          "text": " rest",
+          "special": false
+        },
+        {
+          "id": 476,
+          "text": " or",
+          "special": false
+        },
+        {
+          "id": 304,
+          "text": " in",
+          "special": false
+        },
+        {
+          "id": 13794,
+          "text": " uniform",
+          "special": false
+        },
+        {
+          "id": 11379,
+          "text": " motion",
+          "special": false
+        },
+        {
+          "id": 7241,
+          "text": " unless",
+          "special": false
+        },
+        {
+          "id": 30432,
+          "text": " acted",
+          "special": false
+        },
+        {
+          "id": 5193,
+          "text": " upon",
+          "special": false
+        },
+        {
+          "id": 553,
+          "text": " by",
+          "special": false
+        },
+        {
+          "id": 264,
+          "text": " a",
+          "special": false
+        },
+        {
+          "id": 4179,
+          "text": " net",
+          "special": false
+        },
+        {
+          "id": 9250,
+          "text": " external",
+          "special": false
+        },
+        {
+          "id": 5344,
+          "text": " force",
+          "special": false
+        },
+        {
+          "id": 13,
+          "text": ".",
+          "special": false
+        }
+      ],
+      "qwen3_token_count": 52,
+      "dataset_token_count": 58
+    },
+    {
+      "id": "<urn:uuid:0005>",
+      "text": "Cellular respiration is a set of metabolic reactions and processes that take place in the cells of organisms to convert chemical energy from nutrients into adenosine triphosphate (ATP), and then release waste products.",
+      "tokens": [
+        {
+          "id": 3599,
+          "text": "Cell",
+          "special": false
+        },
+        {
+          "id": 1276,
+          "text": "ular",
+          "special": false
+        },
+        {
+          "id": 592,
+          "text": " res",
+          "special": false
+        },
+        {
+          "id": 28479,
+          "text": "piration",
+          "special": false
+        },
+        {
+          "id": 374,
+          "text": " is",
+          "special": false
+        },
+        {
+          "id": 264,
+          "text": " a",
+          "special": false
+        },
+        {
+          "id": 738,
+          "text": " set",
+          "special": false
+        },
+        {
+          "id": 315,
+          "text": " of",
+          "special": false
+        },
+        {
+          "id": 40761,
+          "text": " metabolic",
+          "special": false
+        },
+        {
+          "id": 24473,
+          "text": " reactions",
+          "special": false
+        },
+        {
+          "id": 323,
+          "text": " and",
+          "special": false
+        },
+        {
+          "id": 11364,
+          "text": " processes",
+          "special": false
+        },
+        {
+          "id": 429,
+          "text": " that",
+          "special": false
+        },
+        {
+          "id": 1896,
+          "text": " take",
+          "special": false
+        },
+        {
+          "id": 1992,
+          "text": " place",
+          "special": false
+        },
+        {
+          "id": 304,
+          "text": " in",
+          "special": false
+        },
+        {
+          "id": 279,
+          "text": " the",
+          "special": false
+        },
+        {
+          "id": 7761,
+          "text": " cells",
+          "special": false
+        },
+        {
+          "id": 315,
+          "text": " of",
+          "special": false
+        },
+        {
+          "id": 43204,
+          "text": " organisms",
+          "special": false
+        },
+        {
+          "id": 311,
+          "text": " to",
+          "special": false
+        },
+        {
+          "id": 5508,
+          "text": " convert",
+          "special": false
+        },
+        {
+          "id": 11483,
+          "text": " chemical",
+          "special": false
+        },
+        {
+          "id": 4802,
+          "text": " energy",
+          "special": false
+        },
+        {
+          "id": 504,
+          "text": " from",
+          "special": false
+        },
+        {
+          "id": 36393,
+          "text": " nutrients",
+          "special": false
+        },
+        {
+          "id": 1119,
+          "text": " into",
+          "special": false
+        },
+        {
+          "id": 993,
+          "text": " ad",
+          "special": false
+        },
+        {
+          "id": 70870,
+          "text": "enos",
+          "special": false
+        },
+        {
+          "id": 482,
+          "text": "ine",
+          "special": false
+        },
+        {
+          "id": 2406,
+          "text": " tri",
+          "special": false
+        },
+        {
+          "id": 759,
+          "text": "ph",
+          "special": false
+        },
+        {
+          "id": 92373,
+          "text": "osphate",
+          "special": false
+        },
+        {
+          "id": 320,
+          "text": " (",
+          "special": false
+        },
+        {
+          "id": 828,
+          "text": "AT",
+          "special": false
+        },
+        {
+          "id": 47,
+          "text": "P",
+          "special": false
+        },
+        {
+          "id": 701,
+          "text": "),",
+          "special": false
+        },
+        {
+          "id": 323,
+          "text": " and",
+          "special": false
+        },
+        {
+          "id": 1221,
+          "text": " then",
+          "special": false
+        },
+        {
+          "id": 4879,
+          "text": " release",
+          "special": false
+        },
+        {
+          "id": 12291,
+          "text": " waste",
+          "special": false
+        },
+        {
+          "id": 3871,
+          "text": " products",
+          "special": false
+        },
+        {
+          "id": 13,
+          "text": ".",
+          "special": false
+        }
+      ],
+      "qwen3_token_count": 43,
+      "dataset_token_count": 45
+    },
+    {
+      "id": "<urn:uuid:0006>",
+      "text": "In computer science, a hash table is a data structure that implements an associative array, a structure that can map keys to values. A hash table uses a hash function to compute an index into an array of buckets from which the desired value can be found. Ideally lookups run in am",
+      "tokens": [
+        {
+          "id": 641,
+          "text": "In",
+          "special": false
+        },
+        {
+          "id": 6366,
+          "text": " computer",
+          "special": false
+        },
+        {
+          "id": 8038,
+          "text": " science",
+          "special": false
+        },
+        {
+          "id": 11,
+          "text": ",",
+          "special": false
+        },
+        {
+          "id": 264,
+          "text": " a",
+          "special": false
+        },
+        {
+          "id": 5175,
+          "text": " hash",
+          "special": false
+        },
+        {
+          "id": 1965,
+          "text": " table",
+          "special": false
+        },
+        {
+          "id": 374,
+          "text": " is",
+          "special": false
+        },
+        {
+          "id": 264,
+          "text": " a",
+          "special": false
+        },
+        {
+          "id": 821,
+          "text": " data",
+          "special": false
+        },
+        {
+          "id": 5944,
+          "text": " structure",
+          "special": false
+        },
+        {
+          "id": 429,
+          "text": " that",
+          "special": false
+        },
+        {
+          "id": 5169,
+          "text": " implements",
+          "special": false
+        },
+        {
+          "id": 458,
+          "text": " an",
+          "special": false
+        },
+        {
+          "id": 68903,
+          "text": " associative",
+          "special": false
+        },
+        {
+          "id": 1334,
+          "text": " array",
+          "special": false
+        },
+        {
+          "id": 11,
+          "text": ",",
+          "special": false
+        },
+        {
+          "id": 264,
+          "text": " a",
+          "special": false
+        },
+        {
+          "id": 5944,
+          "text": " structure",
+          "special": false
+        },
+        {
+          "id": 429,
+          "text": " that",
+          "special": false
+        },
+        {
+          "id": 646,
+          "text": " can",
+          "special": false
+        },
+        {
+          "id": 2415,
+          "text": " map",
+          "special": false
+        },
+        {
+          "id": 6894,
+          "text": " keys",
+          "special": false
+        },
+        {
+          "id": 311,
+          "text": " to",
+          "special": false
+        },
+        {
+          "id": 2750,
+          "text": " values",
+          "special": false
+        },
+        {
+          "id": 13,
+          "text": ".",
+          "special": false
+        },
+        {
+          "id": 362,
+          "text": " A",
+          "special": false
+        },
+        {
+          "id": 5175,
+          "text": " hash",
+          "special": false
+        },
+        {
+          "id": 1965,
+          "text": " table",
+          "special": false
+        },
+        {
+          "id": 5711,
+          "text": " uses",
+          "special": false
+        },
+        {
+          "id": 264,
+          "text": " a",
+          "special": false
+        },
+        {
+          "id": 5175,
+          "text": " hash",
+          "special": false
+        },
+        {
+          "id": 729,
+          "text": " function",
+          "special": false
+        },
+        {
+          "id": 311,
+          "text": " to",
+          "special": false
+        },
+        {
+          "id": 12564,
+          "text": " compute",
+          "special": false
+        },
+        {
+          "id": 458,
+          "text": " an",
+          "special": false
+        },
+        {
+          "id": 1922,
+          "text": " index",
+          "special": false
+        },
+        {
+          "id": 1119,
+          "text": " into",
+          "special": false
+        },
+        {
+          "id": 458,
+          "text": " an",
+          "special": false
+        },
+        {
+          "id": 1334,
+          "text": " array",
+          "special": false
+        },
+        {
+          "id": 315,
+          "text": " of",
+          "special": false
+        },
+        {
+          "id": 42112,
+          "text": " buckets",
+          "special": false
+        },
+        {
+          "id": 504,
+          "text": " from",
+          "special": false
+        },
+        {
+          "id": 892,
+          "text": " which",
+          "special": false
+        },
+        {
+          "id": 279,
+          "text": " the",
+          "special": false
+        },
+        {
+          "id": 12685,
+          "text": " desired",
+          "special": false
+        },
+        {
+          "id": 897,
+          "text": " value",
+          "special": false
+        },
+        {
+          "id": 646,
+          "text": " can",
+          "special": false
+        },
+        {
+          "id": 387,
+          "text": " be",
+          "special": false
+        },
+        {
+          "id": 1730,
+          "text": " found",
+          "special": false
+        },
+        {
+          "id": 13,
+          "text": ".",
+          "special": false
+        },
+        {
+          "id": 66701,
+          "text": " Ideally",
+          "special": false
+        },
+        {
+          "id": 1401,
+          "text": " look",
+          "special": false
+        },
+        {
+          "id": 8602,
+          "text": "ups",
+          "special": false
+        },
+        {
+          "id": 1598,
+          "text": " run",
+          "special": false
+        },
+        {
+          "id": 304,
+          "text": " in",
+          "special": false
+        },
+        {
+          "id": 1079,
+          "text": " am",
+          "special": false
+        }
+      ],
+      "qwen3_token_count": 57,
+      "dataset_token_count": 69
+    }
+  ]
+}

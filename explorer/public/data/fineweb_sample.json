@@ -1,0 +1,84 @@
+{
+  "source": "embedded",
+  "count": 6,
+  "rows": [
+    {
+      "text": "Photosynthesis is the process by which green plants and some other organisms use sunlight to synthesize foods from carbon dioxide and water. In plants, photosynthesis generally takes place in the leaves, inside organelles called chloroplasts. The overall reaction converts light energy into chemical energy stored in glucose.",
+      "id": "<urn:uuid:0001>",
+      "dump": "CC-MAIN-2024-10",
+      "url": "https://example.edu/biology/photosynthesis",
+      "date": "2024-03-01T00:00:00Z",
+      "file_path": "sample/000_00000.parquet",
+      "language": "en",
+      "language_score": 0.98,
+      "token_count": 64,
+      "score": 4.1,
+      "int_score": 4
+    },
+    {
+      "text": "The French Revolution was a period of radical political and societal change in France that began with the Estates General of 1789 and ended with the formation of the French Consulate in November 1799. Many of its ideas are considered fundamental principles of liberal democracy.",
+      "id": "<urn:uuid:0002>",
+      "dump": "CC-MAIN-2024-10",
+      "url": "https://example.edu/history/french-revolution",
+      "date": "2024-03-02T00:00:00Z",
+      "file_path": "sample/000_00000.parquet",
+      "language": "en",
+      "language_score": 0.97,
+      "token_count": 52,
+      "score": 3.7,
+      "int_score": 4
+    },
+    {
+      "text": "A prime number is a natural number greater than 1 that is not a product of two smaller natural numbers. The first few primes are 2, 3, 5, 7, 11 and 13. The fundamental theorem of arithmetic establishes the central role of primes in number theory: every integer greater than 1 is either prime or can be factorized uniquely into primes.",
+      "id": "<urn:uuid:0003>",
+      "dump": "CC-MAIN-2024-18",
+      "url": "https://example.edu/math/prime-numbers",
+      "date": "2024-04-12T00:00:00Z",
+      "file_path": "sample/000_00001.parquet",
+      "language": "en",
+      "language_score": 0.99,
+      "token_count": 71,
+      "score": 4.5,
+      "int_score": 5
+    },
+    {
+      "text": "Newton's laws of motion are three basic laws of classical mechanics that describe the relationship between the motion of an object and the forces acting on it. The first law states that an object remains at rest or in uniform motion unless acted upon by a net external force.",
+      "id": "<urn:uuid:0004>",
+      "dump": "CC-MAIN-2024-18",
+      "url": "https://example.edu/physics/newtons-laws",
+      "date": "2024-04-18T00:00:00Z",
+      "file_path": "sample/000_00001.parquet",
+      "language": "en",
+      "language_score": 0.96,
+      "token_count": 58,
+      "score": 3.9,
+      "int_score": 4
+    },
+    {
+      "text": "Cellular respiration is a set of metabolic reactions and processes that take place in the cells of organisms to convert chemical energy from nutrients into adenosine triphosphate (ATP), and then release waste products.",
+      "id": "<urn:uuid:0005>",
+      "dump": "CC-MAIN-2024-22",
+      "url": "https://example.edu/biology/cellular-respiration",
+      "date": "2024-05-02T00:00:00Z",
+      "file_path": "sample/000_00002.parquet",
+      "language": "en",
+      "language_score": 0.98,
+      "token_count": 45,
+      "score": 4.0,
+      "int_score": 4
+    },
+    {
+      "text": "In computer science, a hash table is a data structure that implements an associative array, a structure that can map keys to values. A hash table uses a hash function to compute an index into an array of buckets from which the desired value can be found. Ideally lookups run in amortized O(1) time.",
+      "id": "<urn:uuid:0006>",
+      "dump": "CC-MAIN-2024-22",
+      "url": "https://example.edu/cs/hash-tables",
+      "date": "2024-05-09T00:00:00Z",
+      "file_path": "sample/000_00002.parquet",
+      "language": "en",
+      "language_score": 0.97,
+      "token_count": 69,
+      "score": 4.3,
+      "int_score": 4
+    }
+  ]
+}

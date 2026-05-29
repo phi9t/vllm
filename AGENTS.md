@@ -1,9 +1,17 @@
 # Agent Instructions for vLLM
 
-> These instructions apply to **all** AI-assisted contributions to `vllm-project/vllm`.
-> Breaching these guidelines can result in automatic banning.
+> This is **`phi9t`'s research fork** of vLLM — a platform for data exploration,
+> component deep-dives, and model-architecture experiments. These instructions apply to
+> **all** AI-assisted work in this fork.
+>
+> **Upstream contributions** to `vllm-project/vllm` must *additionally* satisfy the
+> Upstream Contribution Policy (§1); breaching it upstream can result in automatic banning.
 
-## 1. Contribution Policy (Mandatory)
+## 1. Upstream Contribution Policy (when targeting `vllm-project/vllm`)
+
+This policy governs **PRs opened against upstream `vllm-project/vllm`**. Local research and
+developer-experience work in this fork (e.g. `devx/`, `hacks/`, `explorer/`) is **not** bound
+by it — keep such work coherent and human-reviewed, but it is not an upstream contribution.
 
 ### Duplicate-work checks
 
