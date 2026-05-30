@@ -49,6 +49,14 @@ const MAIN_PITCH = 52
 const PAD = 46
 const SHELL_PAD = 16
 
+// Hierarchy spacing: group brackets are derived from the real branch-panel extents so the
+// outline always fully contains its panels, with no overlap between adjacent groups.
+const BRACKET_M = 14   // bracket edge → nearest branch-panel extent (inner margin)
+const GROUP_GAP = 20   // gap between a group (incl. its label chip) and the neighbor region
+const PILL_OVER = 17   // a branch panel's header pill rises this far above its junction (yJunc)
+const CHIP_OVER = 9    // a group label chip rises this far above the bracket's top edge
+const TEE_OVER = 4     // a branch's tee dot sits this far below yTee
+
 /** Vertical span a branch occupies between its tee (bottom) and junction (top). */
 const branchHeight = (n: number) =>
   PRENORM_GAP + CARD_H / 2 + (n - 1) * CARD_PITCH + CARD_H / 2 + JUNC_GAP
@@ -78,18 +86,27 @@ interface Layout {
 }
 
 function computeLayout(manifest: ModelArch): Layout {
-  // Compute worst-case metrics at MAX_TOKENS so widths are stable across slider
-  const worst = computeMetrics(manifest, MAX_TOKENS)
+  // The longest metric STRING is not always at MAX_TOKENS — e.g. memory renders "KV 999.9 KiB"
+  // (wider) at a mid token count vs "KV 4.5 MiB" at 4096. So measure widths against a geometric
+  // sweep of token counts across the whole slider range and keep the worst per block. Cheap:
+  // ~25 samples, once per manifest under useMemo.
+  const sampleTs: number[] = []
+  for (let t = 8; t < MAX_TOKENS; t = Math.max(t + 1, Math.round(t * 1.3))) sampleTs.push(t)
+  sampleTs.push(MAX_TOKENS)
+  const sampled = sampleTs.map((t) => computeMetrics(manifest, t))
+  const metricLenses: Lens[] = ['shapes', 'compute', 'memory']
 
   const worstMetric = (id: string): string => {
-    const m = worst[id]
-    if (!m) return ''
-    const candidates = [
-      lensMetric(m, 'shapes'),
-      lensMetric(m, 'compute'),
-      lensMetric(m, 'memory'),
-    ]
-    return candidates.reduce((a, b) => (b.length > a.length ? b : a), '')
+    let best = ''
+    for (const metrics of sampled) {
+      const m = metrics[id]
+      if (!m) continue
+      for (const lens of metricLenses) {
+        const s = lensMetric(m, lens)
+        if (s.length > best.length) best = s
+      }
+    }
+    return best
   }
 
   // CARD_W = widest branch card across all layer groups
@@ -189,6 +206,8 @@ export default function ModelCircuit({
     headYs.unshift({ block, y })
     y += MAIN_PITCH
   }
+  // `cursor` tracks the lowest occupied edge so far (bottom of the lowest head card).
+  let cursor = manifest.head.length ? y - MAIN_PITCH + MAIN_H / 2 : PAD
 
   // Layer groups — each group has brackets and interleaved branches.
   // For each group we need: bracketTop, bracketBot, and per-branch tee/junction ys.
@@ -201,41 +220,41 @@ export default function ModelCircuit({
   const groupLayouts: GroupLayout[] = []
 
   for (const group of [...manifest.layers].reverse()) {
-    const bracketTopY = y
+    // Place the topmost junction so the group's label chip clears `cursor` by GROUP_GAP:
+    //   chipTop = bracketTop - CHIP_OVER = topYJunc - PILL_OVER - BRACKET_M - CHIP_OVER
+    const topYJunc = cursor + GROUP_GAP + CHIP_OVER + BRACKET_M + PILL_OVER
     // For each branch (in reverse order since we're building top-to-bottom in SVG):
     // Junction (merge point) comes before tee (split point) when going upward.
+    let by = topYJunc
     const branchLayouts: GroupLayout['branches'] = []
     for (const branch of [...group.branches].reverse()) {
       const cardCount = 1 + branch.steps.length // preNorm + steps
-      const yJunc = y
-      const span = branchHeight(cardCount)
-      const yTee = y + span
+      const yJunc = by
+      const yTee = by + branchHeight(cardCount)
       branchLayouts.unshift({ branch, yTee, yJunc })
-      y = yTee + BRANCH_GAP
+      by = yTee + BRANCH_GAP
     }
-    // Remove the last BRANCH_GAP (already ends the group)
-    y -= BRANCH_GAP
-    const bracketBotY = y + MAIN_PITCH / 2
-    y += MAIN_PITCH / 2
-
-    groupLayouts.push({
-      group,
-      bracketTop: bracketTopY,
-      bracketBot: bracketBotY,
-      branches: branchLayouts,
-    })
+    by -= BRANCH_GAP // remove the trailing gap; `by` is now the bottom branch's yTee
+    const bottomYTee = by
+    // Bracket bounds derive from the real panel extents (topmost pill .. bottommost tee dot),
+    // so the outline always fully contains every branch panel in the group.
+    const bracketTop = topYJunc - PILL_OVER - BRACKET_M
+    const bracketBot = bottomYTee + TEE_OVER + BRACKET_M
+    groupLayouts.push({ group, bracketTop, bracketBot, branches: branchLayouts })
+    cursor = bracketBot
   }
   groupLayouts.reverse()
 
-  // Prelude blocks (bottom of SVG = input side)
+  // Prelude blocks (bottom of SVG = input side) — start clear of the last group's bracket.
   const preludeYs: { block: Block; y: number }[] = []
+  let y2 = cursor + GROUP_GAP + MAIN_H / 2
   for (const block of [...manifest.prelude].reverse()) {
-    preludeYs.unshift({ block, y })
-    y += MAIN_PITCH
+    preludeYs.unshift({ block, y: y2 })
+    y2 += MAIN_PITCH
   }
   preludeYs.reverse()
-  // y now = total height
-  const height = y + PAD
+  // y2 now = total height
+  const height = y2 + PAD
 
   const yTop = PAD
   const yBot = height - PAD
