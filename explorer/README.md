@@ -72,6 +72,9 @@ explorer/
 
 ## Docs
 
+- [`IMPLEMENTATION_GUIDE.md`](IMPLEMENTATION_GUIDE.md) — **how to build one**: a rigorous
+  builder's manual for the two SVG diagram families (model circuit + system-architecture
+  component graph), the layout/no-overflow/containment algorithms, and the Observatory aesthetics.
 - [`EXPLORER_DESIGN.md`](EXPLORER_DESIGN.md) — the distilled design language (tokens,
   shell, data contract, UI primitives, the no-overflow invariant).
 - [`GENERALIZATION_WORKFLOW.md`](GENERALIZATION_WORKFLOW.md) — the requirements spec and the

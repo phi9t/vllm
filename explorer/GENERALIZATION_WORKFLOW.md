@@ -3,7 +3,10 @@
 > Runbook and requirements for making every Explorer mode as data-driven and
 > subject-switchable as the Architecture mode is today.
 >
-> See also: [`EXPLORER_DESIGN.md`](EXPLORER_DESIGN.md) for the Observatory design language.
+> See also: [`EXPLORER_DESIGN.md`](EXPLORER_DESIGN.md) for the Observatory design language, and
+> [`IMPLEMENTATION_GUIDE.md`](IMPLEMENTATION_GUIDE.md) for the end-to-end builder's manual (the
+> diagram layout/no-overflow/containment algorithms + aesthetics). This is the **requirements**
+> doc of that triad.
 
 ---
 

@@ -3,6 +3,10 @@
 > Distilled from three sibling front-ends — `clinique/explorer`, `muon_optimizer/explorer`,
 > and `lumina` (rope-visualizer) — and realized in this `explorer/` kit. This is the style
 > guide: copy the tokens, the shell, and the contracts to build a new explorer.
+>
+> This is the **language** doc (what it looks like). For *how to build* a diagram end-to-end see
+> [`IMPLEMENTATION_GUIDE.md`](IMPLEMENTATION_GUIDE.md); for the *requirements* (R1–R8) and runbooks
+> see [`GENERALIZATION_WORKFLOW.md`](GENERALIZATION_WORKFLOW.md).
 
 ## Two lineages, one aesthetic
 
