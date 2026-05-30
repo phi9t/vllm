@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-05-30T22:35:13.191351+00:00",
+  "generated_at": "2026-05-30T23:16:59.584257+00:00",
   "guide": "HACKERS_GUIDE.md",
   "nodes": [
     {
@@ -151,6 +151,16 @@
     {
       "id": "section-4",
       "section": "4",
+      "title": "Foundations: five mental models",
+      "group": "section",
+      "file": "vllm/v1/core/sched/scheduler.py",
+      "line": 329,
+      "symbol": null,
+      "hacks": []
+    },
+    {
+      "id": "section-5",
+      "section": "5",
       "title": "`LLM.generate()` \u2014 the entry point",
       "group": "section",
       "file": "vllm/entrypoints/llm.py",
@@ -162,8 +172,8 @@
       ]
     },
     {
-      "id": "section-5",
-      "section": "5",
+      "id": "section-6",
+      "section": "6",
       "title": "Input processing & tokenization",
       "group": "section",
       "file": "vllm/inputs/preprocess.py",
@@ -174,8 +184,8 @@
       ]
     },
     {
-      "id": "section-6",
-      "section": "6",
+      "id": "section-7",
+      "section": "7",
       "title": "EngineCore: the step loop",
       "group": "section",
       "file": "vllm/v1/engine/core.py",
@@ -184,8 +194,8 @@
       "hacks": []
     },
     {
-      "id": "section-7",
-      "section": "7",
+      "id": "section-8",
+      "section": "8",
       "title": "The Scheduler",
       "group": "section",
       "file": "vllm/v1/core/sched/scheduler.py",
@@ -197,20 +207,20 @@
       ]
     },
     {
-      "id": "section-8",
-      "section": "8",
+      "id": "section-9",
+      "section": "9",
       "title": "Paged attention & the KV cache manager",
       "group": "section",
-      "file": "vllm/v1/core/kv_cache_manager.py",
-      "line": 110,
-      "symbol": "class KVCacheManager",
+      "file": "vllm/v1/core/block_pool.py",
+      "line": 130,
+      "symbol": null,
       "hacks": [
         "hacks/04_prefix_cache_hashing.py"
       ]
     },
     {
-      "id": "section-9",
-      "section": "9",
+      "id": "section-10",
+      "section": "10",
       "title": "KV cache sizing & memory profiling",
       "group": "section",
       "file": "vllm/v1/worker/gpu_worker.py",
@@ -221,8 +231,8 @@
       ]
     },
     {
-      "id": "section-10",
-      "section": "10",
+      "id": "section-11",
+      "section": "11",
       "title": "Multi-tier KV cache offloading",
       "group": "section",
       "file": "vllm/v1/kv_offload/base.py",
@@ -231,8 +241,8 @@
       "hacks": []
     },
     {
-      "id": "section-11",
-      "section": "11",
+      "id": "section-12",
+      "section": "12",
       "title": "Continuous batching, in code",
       "group": "section",
       "file": null,
@@ -243,8 +253,8 @@
       ]
     },
     {
-      "id": "section-12",
-      "section": "12",
+      "id": "section-13",
+      "section": "13",
       "title": "Attention backends",
       "group": "section",
       "file": "vllm/v1/attention/selector.py",
@@ -255,21 +265,21 @@
       ]
     },
     {
-      "id": "section-13",
-      "section": "13",
+      "id": "section-14",
+      "section": "14",
       "title": "Sampling",
       "group": "section",
       "file": "vllm/v1/sample/sampler.py",
       "line": 20,
-      "symbol": null,
+      "symbol": "class Sampler",
       "hacks": [
         "hacks/07_sampler.py",
         "hacks/08_logits_processor.py"
       ]
     },
     {
-      "id": "section-14",
-      "section": "14",
+      "id": "section-15",
+      "section": "15",
       "title": "Request lifecycle & output",
       "group": "section",
       "file": "vllm/v1/request.py",
@@ -281,8 +291,8 @@
       ]
     },
     {
-      "id": "section-15",
-      "section": "15",
+      "id": "section-16",
+      "section": "16",
       "title": "Model loading & the model registry",
       "group": "section",
       "file": "vllm/model_executor/models/registry.py",
@@ -291,20 +301,18 @@
       "hacks": []
     },
     {
-      "id": "section-16",
-      "section": "16",
+      "id": "section-17",
+      "section": "17",
       "title": "Workers & executors",
       "group": "section",
       "file": "vllm/v1/worker/gpu_model_runner.py",
       "line": 415,
       "symbol": "class GPUModelRunner",
-      "hacks": [
-        "hacks/11_executor_uniproc.py"
-      ]
+      "hacks": []
     },
     {
-      "id": "section-17",
-      "section": "17",
+      "id": "section-18",
+      "section": "18",
       "title": "Model Runner V2",
       "group": "section",
       "file": "vllm/v1/worker/gpu/model_runner.py",
@@ -313,8 +321,8 @@
       "hacks": []
     },
     {
-      "id": "section-18",
-      "section": "18",
+      "id": "section-19",
+      "section": "19",
       "title": "CUDA graphs & torch.compile",
       "group": "section",
       "file": "vllm/v1/worker/gpu_model_runner.py",
@@ -325,8 +333,8 @@
       ]
     },
     {
-      "id": "section-19",
-      "section": "19",
+      "id": "section-20",
+      "section": "20",
       "title": "Multi-GPU / distributed",
       "group": "section",
       "file": "vllm/v1/executor/abstract.py",
@@ -335,18 +343,18 @@
       "hacks": []
     },
     {
-      "id": "section-20",
-      "section": "20",
+      "id": "section-21",
+      "section": "21",
       "title": "Advanced features",
       "group": "section",
       "file": null,
       "line": null,
-      "symbol": "class StructuredOutputManager",
+      "symbol": null,
       "hacks": []
     },
     {
-      "id": "section-21",
-      "section": "21",
+      "id": "section-22",
+      "section": "22",
       "title": "DeepSeek V4",
       "group": "section",
       "file": "vllm/model_executor/models/registry.py",
@@ -355,19 +363,9 @@
       "hacks": []
     },
     {
-      "id": "section-22",
-      "section": "22",
-      "title": "The serving layer",
-      "group": "section",
-      "file": null,
-      "line": null,
-      "symbol": null,
-      "hacks": []
-    },
-    {
       "id": "section-23",
       "section": "23",
-      "title": "Rust frontend",
+      "title": "The serving layer",
       "group": "section",
       "file": null,
       "line": null,
@@ -377,7 +375,7 @@
     {
       "id": "section-24",
       "section": "24",
-      "title": "Where to go next",
+      "title": "Rust frontend",
       "group": "section",
       "file": null,
       "line": null,
@@ -387,7 +385,7 @@
     {
       "id": "section-25",
       "section": "25",
-      "title": "Hands-on hacks",
+      "title": "Where to go next",
       "group": "section",
       "file": null,
       "line": null,
@@ -397,6 +395,16 @@
     {
       "id": "section-26",
       "section": "26",
+      "title": "Hands-on hacks",
+      "group": "section",
+      "file": null,
+      "line": null,
+      "symbol": null,
+      "hacks": []
+    },
+    {
+      "id": "section-27",
+      "section": "27",
       "title": "Contributing",
       "group": "section",
       "file": null,
@@ -409,109 +417,109 @@
     {
       "n": "01",
       "script": "hacks/01_llm_smoke.py",
-      "section": "4",
+      "section": "5",
       "desc": "Full pipeline on `facebook/opt-125m`. Needs `VLLM_HACK_RUN_MODEL=1`."
     },
     {
       "n": "02",
       "script": "hacks/02_request_lifecycle.py",
-      "section": "14",
+      "section": "15",
       "desc": "Walk `Request` through `RequestStatus`."
     },
     {
       "n": "03",
       "script": "hacks/03_kv_cache_manager.py",
-      "section": "8, 10",
+      "section": "9, 11",
       "desc": "Allocate / share / free blocks across two requests with a common prefix."
     },
     {
       "n": "04",
       "script": "hacks/04_prefix_cache_hashing.py",
-      "section": "8",
+      "section": "9",
       "desc": "Show two prompts hash to identical prefix blocks."
     },
     {
       "n": "05",
       "script": "hacks/05_scheduler_step.py",
-      "section": "7",
+      "section": "8",
       "desc": "One `schedule()` tick with three synthetic requests."
     },
     {
       "n": "06",
       "script": "hacks/06_chunked_prefill.py",
-      "section": "7",
+      "section": "8",
       "desc": "Long prompt sliced across multiple steps."
     },
     {
       "n": "07",
       "script": "hacks/07_sampler.py",
-      "section": "13",
+      "section": "14",
       "desc": "Logits through temperature, top-k, top-p, penalties side by side."
     },
     {
       "n": "08",
       "script": "hacks/08_logits_processor.py",
-      "section": "13",
+      "section": "14",
       "desc": "A 20-line custom processor that bans one token."
     },
     {
       "n": "09",
       "script": "hacks/09_attention_backend_select.py",
-      "section": "12",
+      "section": "13",
       "desc": "Print backend chosen for various `(head_size, dtype, device)` tuples."
     },
     {
       "n": "10",
       "script": "hacks/10_output_processor.py",
-      "section": "14",
+      "section": "15",
       "desc": "Feed synthetic `ModelRunnerOutput` to the detokenizer."
     },
     {
       "n": "11",
       "script": "hacks/11_executor_uniproc.py",
-      "section": "16",
+      "section": "17, 20",
       "desc": "`UniProcExecutor` with a no-op worker."
     },
     {
       "n": "12",
       "script": "hacks/12_engine_step.py",
-      "section": "6, 17",
+      "section": "7, 18",
       "desc": "**Capstone:** wire 03 + 05 + 07 + 10 into one full engine step, zero CUDA."
     },
     {
       "n": "13",
       "script": "hacks/13_async_llm_stream.py",
-      "section": "4",
+      "section": "5",
       "desc": "Stream tokens from a real tiny model. Needs `VLLM_HACK_RUN_MODEL=1`."
     },
     {
       "n": "14",
       "script": "hacks/14_input_processor.py",
-      "section": "5",
-      "desc": "Prompt \u2192 token ids \u2192 `EngineCoreRequest` shape, no model."
+      "section": "6",
+      "desc": "Prompt \u2192 token ids \u2192 `EngineCoreRequest` shape."
     },
     {
       "n": "15",
       "script": "hacks/15_kv_cache_sizing.py",
-      "section": "9",
-      "desc": "KV-cache sizing calculator (GQA vs MLA), pure arithmetic."
+      "section": "10",
+      "desc": "KV-cache sizing arithmetic (GQA vs MLA)."
     },
     {
       "n": "16",
       "script": "hacks/16_batch_packing.py",
-      "section": "11",
-      "desc": "Pack a mixed prefill+decode batch into `query_start_loc` / `seq_lens`."
+      "section": "12",
+      "desc": "Flatten a mixed prefill+decode batch into index tensors."
     },
     {
       "n": "17",
       "script": "hacks/17_model_registry.py",
-      "section": "15, 21",
+      "section": "16, 22",
       "desc": "Registry/`get_model` API + param & KV footprint from a config."
     },
     {
       "n": "18",
       "script": "hacks/18_cudagraph_bucketing.py",
-      "section": "18",
+      "section": "19",
       "desc": "Round batch sizes up to captured CUDA-graph buckets."
     }
   ]

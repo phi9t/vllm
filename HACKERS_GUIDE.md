@@ -5,7 +5,10 @@
 > September 2025 blog post
 > [*Inside vLLM: Anatomy of a High-Throughput LLM Inference System*](https://blog.vllm.ai/2025/09/05/anatomy-of-vllm.html),
 > updated to the current code and paired with a `hacks/` directory of
-> runnable scripts that exercise each subsystem in isolation.
+> runnable scripts that exercise each subsystem in isolation. This is a
+> *teaching* guide: each section gives the **background** (the problem and why
+> it's hard), the **algorithm** (data structures, invariants, complexity), a
+> **worked example**, and the **tradeoffs** — then points you at the real code.
 >
 > If you only want one sentence: every request enters via
 > [`vllm/entrypoints/llm.py:66`](vllm/entrypoints/llm.py) (`class LLM`),
@@ -24,29 +27,30 @@
 1. [How to read this guide](#1-how-to-read-this-guide)
 2. [What's new in v0.22.0](#2-whats-new-in-v0220)
 3. [30-second architecture](#3-30-second-architecture)
-4. [`LLM.generate()` — the entry point](#4-llmgenerate--the-entry-point)
-5. [Input processing & tokenization](#5-input-processing--tokenization)
-6. [EngineCore: the step loop](#6-enginecore-the-step-loop)
-7. [The Scheduler](#7-the-scheduler)
-8. [Paged attention & the KV cache manager](#8-paged-attention--the-kv-cache-manager)
-9. [KV cache sizing & memory profiling](#9-kv-cache-sizing--memory-profiling)
-10. [Multi-tier KV cache offloading](#10-multi-tier-kv-cache-offloading)
-11. [Continuous batching, in code](#11-continuous-batching-in-code)
-12. [Attention backends](#12-attention-backends)
-13. [Sampling](#13-sampling)
-14. [Request lifecycle & output](#14-request-lifecycle--output)
-15. [Model loading & the model registry](#15-model-loading--the-model-registry)
-16. [Workers & executors](#16-workers--executors)
-17. [Model Runner V2](#17-model-runner-v2)
-18. [CUDA graphs & torch.compile](#18-cuda-graphs--torchcompile)
-19. [Multi-GPU / distributed](#19-multi-gpu--distributed)
-20. [Advanced features](#20-advanced-features)
-21. [DeepSeek V4](#21-deepseek-v4)
-22. [The serving layer](#22-the-serving-layer)
-23. [Rust frontend](#23-rust-frontend)
-24. [Where to go next](#24-where-to-go-next)
-25. [Hands-on hacks](#25-hands-on-hacks)
-26. [Contributing](#26-contributing)
+4. [Foundations: five mental models](#4-foundations-five-mental-models)
+5. [`LLM.generate()` — the entry point](#5-llmgenerate--the-entry-point)
+6. [Input processing & tokenization](#6-input-processing--tokenization)
+7. [EngineCore: the step loop](#7-enginecore-the-step-loop)
+8. [The Scheduler](#8-the-scheduler)
+9. [Paged attention & the KV cache manager](#9-paged-attention--the-kv-cache-manager)
+10. [KV cache sizing & memory profiling](#10-kv-cache-sizing--memory-profiling)
+11. [Multi-tier KV cache offloading](#11-multi-tier-kv-cache-offloading)
+12. [Continuous batching, in code](#12-continuous-batching-in-code)
+13. [Attention backends](#13-attention-backends)
+14. [Sampling](#14-sampling)
+15. [Request lifecycle & output](#15-request-lifecycle--output)
+16. [Model loading & the model registry](#16-model-loading--the-model-registry)
+17. [Workers & executors](#17-workers--executors)
+18. [Model Runner V2](#18-model-runner-v2)
+19. [CUDA graphs & torch.compile](#19-cuda-graphs--torchcompile)
+20. [Multi-GPU / distributed](#20-multi-gpu--distributed)
+21. [Advanced features](#21-advanced-features)
+22. [DeepSeek V4](#22-deepseek-v4)
+23. [The serving layer](#23-the-serving-layer)
+24. [Rust frontend](#24-rust-frontend)
+25. [Where to go next](#25-where-to-go-next)
+26. [Hands-on hacks](#26-hands-on-hacks)
+27. [Contributing](#27-contributing)
 
 ---
 
@@ -74,9 +78,12 @@ outs = llm.generate(["The capital of France is"], SamplingParams(max_tokens=8))
 print(outs[0].outputs[0].text)
 ```
 
-Each section ends with a **▶ Try it** pointer to a script in `hacks/`
-that lets you exercise the component **without booting the whole
-engine** — no model weights, no CUDA in most cases.
+**How each section is built.** Start with §4 (Foundations) — it sets up the
+five ideas every other section leans on. After that, each subsystem section
+follows the same shape: *the problem → how it works → a worked example → the
+tradeoffs*, ending with a **▶ Try it** pointer to a script in `hacks/` that
+exercises the component **without booting the whole engine** (no weights, no
+CUDA in most cases).
 
 **Conventions.** Code references use the form
 `vllm/path/to/file.py:LINE` and link into the tree at the
@@ -84,7 +91,7 @@ engine** — no model weights, no CUDA in most cases.
 search by the named symbol if a line moves. (The companion
 [vLLM Explorer](https://phi9t.github.io/vllm/) re-grounds every reference
 by symbol-grep, so its "Component Deep Dive" stays accurate even when
-lines shift.)
+lines shift — and renders this guide as a page.)
 
 ---
 
@@ -98,12 +105,12 @@ changes that matter most for a hacker reading the engine:
   MoE, full + piecewise CUDA graphs, MTP speculative decoding on ROCm,
   more fused kernels, and ROCm parity. Registered as `DeepseekV4ForCausalLM`
   at [`vllm/model_executor/models/registry.py:101`](vllm/model_executor/models/registry.py).
-  See §21.
+  See §22.
 - **🦀 Experimental Rust frontend moved in-tree** ([`rust/`](rust/)) — a
-  Cargo workspace for the serving front-end / control plane. See §23.
+  Cargo workspace for the serving front-end / control plane. See §24.
 - **🛠️ Model Runner V2** — a next-gen runner under the new
   [`vllm/v1/worker/gpu/model_runner.py`](vllm/v1/worker/gpu/model_runner.py)
-  subpackage, with oracle backend selection (Qwen3). See §17.
+  subpackage, with oracle backend selection (Qwen3). See §18.
 - **⚡ Batch invariance** — a Cutlass FP8 path
   ([`vllm/model_executor/layers/batch_invariant.py`](vllm/model_executor/layers/batch_invariant.py))
   giving a reported ~28.9% end-to-end latency win, compile-mode support on
@@ -111,7 +118,7 @@ changes that matter most for a hacker reading the engine:
   regardless of batch composition.
 - **🧊 Multi-tier KV cache offloading**
   ([`vllm/v1/kv_offload/`](vllm/v1/kv_offload/)) — spill KV blocks from GPU
-  HBM to host RAM to disk. See §10.
+  HBM to host RAM to disk. See §11.
 - **🟢 NVIDIA Blackwell:** FlashInfer MoE + FP4 GEMM for SM120/121;
   per-tensor FP8 CUTLASS on SM12.1. **🔴 AMD ROCm:** DeepSeek V4.
 - **🆕 New architectures:** MiniCPM-V 4.6, InternS2 Preview, OpenVLA;
@@ -119,7 +126,7 @@ changes that matter most for a hacker reading the engine:
 
 **Before you upgrade.** Pin churn around `nvidia-cutlass-dsl` (now
 `==4.5.2` with the `[cu13]` extra on CUDA 13) and the NIXL connector
-(`1.x`); the V1 default CUDA-graph mode is `FULL_AND_PIECEWISE` (§18).
+(`1.x`); the V1 default CUDA-graph mode is `FULL_AND_PIECEWISE` (§19).
 Full notes: the
 [v0.22.0 release](https://github.com/vllm-project/vllm/releases/tag/v0.22.0).
 
@@ -176,9 +183,94 @@ The boxes correspond to concrete files (v0.22.0 lines):
 | `Sampler` | [`vllm/v1/sample/sampler.py:20`](vllm/v1/sample/sampler.py) | `class Sampler` |
 | `OutputProcessor` | [`vllm/v1/engine/output_processor.py:110`](vllm/v1/engine/output_processor.py) | `class OutputProcessor` |
 
+The split that matters: the **front-end** (tokenize, detokenize, HTTP) runs
+in the client process; the **engine core** (schedule + KV + execute) runs in
+its own process and the two talk over ZMQ. That boundary is why the same
+engine serves both `LLM.generate()` and the OpenAI server, and it's where the
+Rust frontend (§24) plugs in.
+
 ---
 
-## 4. `LLM.generate()` — the entry point
+## 4. Foundations: five mental models
+
+Five ideas explain almost every design decision in V1. Internalize these and
+the rest of the guide is detail.
+
+### 4.1 Continuous batching & the unified token model
+
+The classic way to batch inference is *request-level*: gather N prompts, run
+them together, wait for all to finish. That wastes the GPU — a 5-token reply
+and a 500-token reply are stuck in the same batch, and new requests wait for
+the slowest one.
+
+vLLM batches at the **token level** instead, and re-decides every step. The
+key simplification (read the NOTE at
+[`vllm/v1/core/sched/scheduler.py:329`](vllm/v1/core/sched/scheduler.py)):
+**there is no "prefill phase" and no "decode phase."** Each request only
+carries two numbers:
+
+- `num_computed_tokens` — how many of its tokens already have KV in the cache.
+- `num_tokens_with_spec` — how many it *wants* computed
+  (`len(prompt) + len(output_so_far) + len(speculative_draft)`).
+
+Every step the scheduler hands each request some tokens so `num_computed_tokens`
+**catches up** to `num_tokens_with_spec`. A brand-new request is "behind" by
+its whole prompt (a big catch-up = prefill); a mid-generation request is behind
+by one token (a tiny catch-up = decode). **Chunked prefill, prefix caching, and
+speculative decoding are not special cases — they're just different values of
+these two counters.** That one abstraction is the spine of the whole engine.
+
+### 4.2 Paged memory (the KV cache is virtual memory)
+
+A transformer must remember the keys/values of every past token (the **KV
+cache**) to generate the next one. A naive cache reserves one big contiguous
+buffer per request, sized to the *max* length — so a request that stops early
+wastes the rest, and you can't admit a new request unless a full max-length
+slab is free. That's internal fragmentation, and it murders throughput.
+
+Paged attention applies the **OS virtual-memory trick**: chop the cache into
+fixed-size **blocks** (default 16 tokens), keep a shared **pool** of physical
+blocks, and give each request a **block table** mapping its logical blocks →
+physical blocks. A request grows one block at a time; identical prefixes can
+**share** the same physical block. §9 is the mechanism.
+
+### 4.3 Prefill vs decode are different *compute profiles*
+
+Even though the scheduler doesn't distinguish them, the hardware does:
+
+- **Prefill** processes many prompt tokens at once → big matmuls →
+  **compute-bound** (you're limited by FLOPs/s).
+- **Decode** processes one token per request → tiny matmuls, but must stream
+  the *entire model's weights* (and KV) through the ALUs for that one token →
+  **memory-bandwidth-bound**.
+
+This is why batching helps decode the most (amortize the weight read over many
+requests' tokens) and why a long prompt's prefill can starve everyone's decode
+(→ chunked prefill, §8/§21).
+
+### 4.4 The memory hierarchy & the roofline
+
+A GPU has fast compute and (relatively) slow memory. Whether a kernel is
+compute- or memory-bound is its *arithmetic intensity* (FLOPs per byte) versus
+the GPU's ratio — the **roofline**. Decode is far left of the ridge: you read
+~all the weights to compute one token, so **latency ≈ (weights + KV) ÷ HBM
+bandwidth**. Three consequences you'll see everywhere: quantization shrinks the
+bytes you must read (faster decode), KV compression (GQA/MLA, §10) shrinks the
+KV you must read, and CUDA graphs (§19) remove per-kernel launch overhead that
+dominates when each kernel is tiny.
+
+### 4.5 Throughput vs latency is the central tension
+
+Every knob trades these two. Bigger batches and bigger prefill chunks raise
+throughput but hurt per-request latency; preemption (§8) protects throughput
+under memory pressure at the cost of a victim's latency; CUDA graphs and the
+Rust frontend cut latency; offloading (§11) buys effective capacity at the cost
+of fault-back latency. The **scheduler** is the component that arbitrates this
+tension every single step — which is why it's the most important file in V1.
+
+---
+
+## 5. `LLM.generate()` — the entry point
 
 The user-facing `LLM` wraps an inner `LLMEngine`, which in V1 is a thin
 adapter that talks to an `EngineCore` (either in-process or over ZMQ).
@@ -200,18 +292,23 @@ adapter that talks to an `EngineCore` (either in-process or over ZMQ).
 
 **Offline vs. online.** Both `LLMEngine` and `AsyncLLM` ultimately push
 `EngineCoreRequest` objects over the same boundary. The difference is
-back-pressure and threading: `LLMEngine` drives the loop synchronously,
-`AsyncLLM` yields control to asyncio between steps.
+back-pressure and threading: `LLMEngine` drives the loop synchronously (call
+`generate`, block, get a list back), `AsyncLLM` yields control to asyncio
+between steps so an HTTP server can interleave hundreds of requests. **Same
+engine, two front-ends** — which is the whole point of the process split (§3).
 
 ▶ Try it: [`hacks/01_llm_smoke.py`](hacks/01_llm_smoke.py) (loads a real
 model — gated by `VLLM_HACK_RUN_MODEL=1`).
 
 ---
 
-## 5. Input processing & tokenization
+## 6. Input processing & tokenization
 
 Before the scheduler ever sees a request, the front-end turns a prompt
-into an `EngineCoreRequest`. The path:
+into an `EngineCoreRequest`. The reason this is its own stage: prompts arrive
+in many shapes (raw text, pre-tokenized ids, chat turns, images/audio), and the
+engine wants exactly one normalized thing — a list of token ids (plus
+multimodal features) — so the hot loop never branches on prompt type.
 
 ```
 prompt (str / chat / tokens / multimodal)
@@ -227,8 +324,7 @@ EngineCoreRequest        (vllm/v1/engine/__init__.py:80)
 ```
 
 - [`vllm/inputs/preprocess.py:48`](vllm/inputs/preprocess.py) —
-  `class InputPreprocessor`. Normalizes the many prompt shapes (raw text,
-  token ids, `{"prompt": ...}`, chat turns, multimodal) into a single
+  `class InputPreprocessor`. Normalizes the many prompt shapes into a single
   internal representation and runs the tokenizer.
 - [`vllm/v1/engine/input_processor.py:36`](vllm/v1/engine/input_processor.py)
   — `class InputProcessor`. The V1 front-end stage that assigns the request
@@ -239,25 +335,28 @@ EngineCoreRequest        (vllm/v1/engine/__init__.py:80)
   `request_id`, `prompt_token_ids`, `mm_features`, `sampling_params`,
   `arrival_time`, `lora_request`, `cache_salt`, …
 
-The same byte-level tokenization is what the companion
-[vLLM Explorer's Data mode](https://phi9t.github.io/vllm/) visualizes
-piece-by-piece.
+**Why a `msgspec.Struct`?** This object crosses the ZMQ process boundary every
+request; `msgspec` gives near-zero-copy, schema-checked (de)serialization, far
+cheaper than pickling. The same byte-level tokenization is what the companion
+[Explorer's Data mode](https://phi9t.github.io/vllm/) visualizes piece by piece.
 
 ▶ Try it: [`hacks/14_input_processor.py`](hacks/14_input_processor.py) —
 prompt → token ids → `EngineCoreRequest` shape, no model.
 
 ---
 
-## 6. EngineCore: the step loop
+## 7. EngineCore: the step loop
 
 `EngineCore` ([`vllm/v1/engine/core.py:94`](vllm/v1/engine/core.py))
-owns the scheduler, the KV cache manager, and the executor. It exposes
-two methods worth knowing:
+owns the scheduler, the KV cache manager, and the executor. It is the
+*synchronous heart*: everything it does is one `step()` at a time, and the
+whole system's throughput is "useful tokens per step × steps per second."
 
 - `add_request` ([line 337](vllm/v1/engine/core.py)) — validates inputs,
   builds a `Request`, and pushes it into the scheduler's waiting queue.
 - `step` ([line 428](vllm/v1/engine/core.py)) — one tick of the engine.
-  Always three stages:
+  Always three stages, and the contract between them is two plain dataclasses
+  (`SchedulerOutput` in, `ModelRunnerOutput` out):
 
 ```mermaid
 sequenceDiagram
@@ -279,6 +378,11 @@ sequenceDiagram
     S-->>EC: EngineCoreOutputs (per request)
 ```
 
+The three stages are **decide (schedule) → execute → account (update)**. Keeping
+them separate is what lets the executor be swapped (uniproc, multiproc, Ray)
+without the scheduler knowing, and what lets a stub stand in for the model — the
+basis of the zero-CUDA capstone hack.
+
 `EngineCoreProc` ([line 835](vllm/v1/engine/core.py)) is the
 multi-process variant; its `run_busy_loop`
 ([line 1193](vllm/v1/engine/core.py)) sits on a ZMQ socket, decodes
@@ -290,87 +394,121 @@ one full engine step end-to-end with a stub model, **zero CUDA**.
 
 ---
 
-## 7. The Scheduler
+## 8. The Scheduler
 
-The scheduler is the single most important file in V1.
+The scheduler is the single most important file in V1: it decides, every step,
+*which requests run and how many tokens each gets*, under a fixed compute and
+memory budget. Get it wrong and you either starve requests or OOM the KV pool.
 
 - [`vllm/v1/core/sched/scheduler.py:64`](vllm/v1/core/sched/scheduler.py)
   — `class Scheduler(SchedulerInterface)`.
-- [`vllm/v1/core/sched/interface.py`](vllm/v1/core/sched/interface.py)
-  — the abstract base (`SchedulerInterface`).
 - [`vllm/v1/core/sched/output.py`](vllm/v1/core/sched/output.py) —
   `SchedulerOutput` (the contract with the executor).
 
-### What `schedule()` does
+### The problem
 
-`Scheduler.schedule()`
-([line 329](vllm/v1/core/sched/scheduler.py)) picks the next batch.
-Mental model:
+You have a single **token budget** per step (`max_num_scheduled_tokens` — the
+biggest flat batch the GPU should run) and a finite **KV pool**. Requests want
+wildly different amounts of compute (a fresh 2000-token prompt vs. a request
+that needs one more token). You must pack the step to keep the GPU busy
+(throughput) without letting long prefills monopolize it (latency) or running
+out of KV blocks mid-step.
 
-1. **Decode pass.** Walk every request in `self.running`; reserve one
-   new KV block slot per request if needed (cap by token budget).
-2. **Prefill pass.** Promote waiting requests into running if there's
-   leftover budget and free KV blocks. If chunked prefill is on, only
-   chunk a prefix of the prompt that fits the remaining budget.
-3. **Emit `SchedulerOutput`** — flat lists of token ids, slot mappings,
-   and metadata that the worker turns straight into a single tensor.
+### The algorithm (one loop, no phases)
 
-### What `update_from_output()` does
+`schedule()` ([line 329](vllm/v1/core/sched/scheduler.py)) — recall §4.1: each
+request just needs `num_computed_tokens` to catch up to `num_tokens_with_spec`.
 
-`Scheduler.update_from_output()`
-([line 1283](vllm/v1/core/sched/scheduler.py)) is the **feedback path**.
-It appends sampled tokens to each running request, checks stop
-conditions (EOS, `max_tokens`, stop strings), and frees KV blocks for
-finished requests via `KVCacheManager.free`.
+1. `token_budget = max_num_scheduled_tokens`.
+2. **Running first.** Walk `self.running`; for each request,
+   `num_new_tokens = num_tokens_with_spec + num_output_placeholders −
+   num_computed_tokens`, then clamp by `long_prefill_token_threshold` (caps any
+   single request's slice so one long prefill can't eat the batch), by the
+   remaining `token_budget`, and by `max_model_len`. Ask the KV manager to
+   `allocate_slots` for those tokens.
+3. **Preempt under pressure.** If allocation fails (pool full), pick a victim
+   with `max(self.running, key=…)` ([line 457](vllm/v1/core/sched/scheduler.py)) —
+   effectively the most-recently-admitted / lowest-priority request — evict it
+   back to `WAITING`, free its KV, and **restore its tokens to the budget**.
+   Retry. (This is graceful degradation, not an OOM.)
+4. **Then admit waiting.** With leftover budget and free blocks, promote
+   `WAITING` requests, checking the prefix cache (§9) first so a shared prefix
+   costs zero new compute.
+5. **Emit `SchedulerOutput`** — flat per-request token counts, block tables,
+   and slot mappings the worker turns straight into tensors (§12).
 
-### Request status
+`update_from_output()` ([line 1283](vllm/v1/core/sched/scheduler.py)) is the
+feedback half: append each sampled token, advance `num_computed_tokens`, check
+stop conditions (EOS, `max_tokens`, stop strings), and `free` KV for finished
+requests.
 
-```mermaid
-stateDiagram-v2
-  [*] --> WAITING
-  WAITING --> RUNNING : schedule() admits
-  RUNNING --> WAITING : preempted (KV pressure)
-  RUNNING --> FINISHED_STOPPED : EOS / stop string
-  RUNNING --> FINISHED_LENGTH_CAPPED : max_tokens reached
-  RUNNING --> FINISHED_ABORTED : client cancel
-  FINISHED_STOPPED --> [*]
-  FINISHED_LENGTH_CAPPED --> [*]
-  FINISHED_ABORTED --> [*]
-```
+### Worked example
 
-Enum lives at [`vllm/v1/request.py:315`](vllm/v1/request.py).
+`token_budget = 16`, three requests: **A** (prompt 20, wants 2 out), **B**
+(prompt 8, wants 3), **C** (prompt 12, wants 1). With `long_prefill_threshold`
+unset:
+
+| step | running (computed/total) | assigned this step | budget used | notes |
+|---|---|---|---|---|
+| 1 | — | A: 16 (chunk of its 20-tok prefill) | 16/16 | A's prefill is chunked; B, C wait |
+| 2 | A 16/20 | A: 4 (finish prefill), B: 8 (prefill), C: 4 (chunk) | 16/16 | one flat batch mixes A-decode-soon, B-prefill, C-prefill |
+| 3 | A 20/20, B 8/8, C 12/16→… | A: 1, B: 1, C: 8… | 16/16 | A & B now decode (1 tok each); C still prefilling |
+
+Notice steps 2–3 mix prefill and decode tokens in **one** batch — that's §4.1
+and §12 in action. If the pool filled at step 2, C (newest) would be preempted
+and its 4 tokens returned to the budget.
+
+### Tradeoffs & failure modes
+
+- `long_prefill_token_threshold` trades prefill latency for decode fairness.
+- Preemption thrashing: under sustained KV pressure a victim can be evicted and
+  re-admitted repeatedly; prefix caching softens this (its prefill is cheap to
+  redo). 
+- The hacks' `MiniScheduler` teaches a *simplified* two-pass (decode-then-prefill)
+  model; the real engine is the single catch-up loop above.
 
 ▶ Try it:
-- [`hacks/05_scheduler_step.py`](hacks/05_scheduler_step.py) — single
-  scheduling tick with three synthetic requests.
+- [`hacks/05_scheduler_step.py`](hacks/05_scheduler_step.py) — a miniature
+  scheduler with three synthetic requests.
 - [`hacks/06_chunked_prefill.py`](hacks/06_chunked_prefill.py) — long
-  prompt, small budget, watch the prompt slice.
+  prompt, small budget, watch the prompt get sliced.
 
 ---
 
-## 8. Paged attention & the KV cache manager
+## 9. Paged attention & the KV cache manager
 
-Paged attention turns the KV cache into a **block allocator**: each
-request owns a "block table" mapping logical block indices to physical
-GPU memory blocks. Identical prefixes share physical blocks.
+### The problem
 
-### Key files
+Per §4.2: a contiguous per-request KV buffer sized to the max length wastes
+most of its space (a 30-token chat in a 4096 slab) and blocks admission. We want
+to allocate KV in small pieces, on demand, and share identical prefixes.
 
-- [`vllm/v1/core/kv_cache_manager.py:110`](vllm/v1/core/kv_cache_manager.py)
-  — `class KVCacheManager`. The high-level API:
-  - `allocate_slots(request, num_tokens)` ([line 236](vllm/v1/core/kv_cache_manager.py))
-    — return a delta of newly assigned blocks; raises if the pool is
-    full.
-  - `free(request)` ([line 429](vllm/v1/core/kv_cache_manager.py)) —
-    drop reference counts so blocks can be reused.
-- [`vllm/v1/core/block_pool.py:130`](vllm/v1/core/block_pool.py) —
-  `class BlockPool`. The low-level free-list / LRU implementation.
-- [`vllm/v1/core/kv_cache_utils.py`](vllm/v1/core/kv_cache_utils.py)
-  — `BlockHash`, `BlockHashWithGroupId`, and
-  `get_request_block_hasher(...)`, the factory that produces a
-  per-request hasher used for prefix-cache lookups.
+### The data structures
 
-### Prefix sharing, visually
+- **Block**: KV storage for `block_size` (default 16) tokens of one layer-group.
+- **Block table**: per request, a list mapping logical block i → a physical
+  block id. Attention reads KV by following this table — random physical order
+  is fine.
+- **`BlockPool`** ([`vllm/v1/core/block_pool.py:130`](vllm/v1/core/block_pool.py))
+  — the free list + an LRU of *unreferenced* cached blocks, plus a
+  `cached_block_hash_to_block` map for prefix lookups. Every physical block has
+  a `ref_cnt`; a block is evictable only when `ref_cnt == 0`.
+- **`KVCacheManager`** ([`vllm/v1/core/kv_cache_manager.py:110`](vllm/v1/core/kv_cache_manager.py)):
+  `allocate_slots(request, num_tokens)` ([line 236](vllm/v1/core/kv_cache_manager.py))
+  returns the *delta* of new blocks (raising if the pool is full → triggers
+  scheduler preemption), and `free(request)` ([line 429](vllm/v1/core/kv_cache_manager.py))
+  drops ref-counts.
+
+### Prefix sharing via a hash *chain*
+
+The trick that makes prefix caching correct:
+`get_request_block_hasher` ([`vllm/v1/core/kv_cache_utils.py:637`](vllm/v1/core/kv_cache_utils.py))
+hashes **only full blocks**, and **each block's hash folds in the previous
+block's hash**: `h_i = hash(h_{i-1}, tokens_i, extra_keys)`. So two requests with
+the same prefix produce the *same chain* of hashes up to the point they diverge —
+and `BlockPool.get_cached_block` returns the already-resident physical blocks
+(bumping `ref_cnt` via `touch`). The `extra_keys` (multimodal/LoRA) and a
+per-cache-group id (`BlockHashWithGroupId`) keep different content from colliding.
 
 ```mermaid
 flowchart LR
@@ -388,73 +526,97 @@ flowchart LR
     P2[P2\n' is Paris']
     P3[P3\n' is in Europe']
   end
-  A0 -. block_hash hit .-> P0
-  B0 -. block_hash hit .-> P0
-  A1 -. hit .-> P1
-  B1 -. hit .-> P1
+  A0 -. h0 hit .-> P0
+  B0 -. h0 hit .-> P0
+  A1 -. h1 hit .-> P1
+  B1 -. h1 hit .-> P1
   A2 --> P2
   B2 --> P3
 ```
 
-The hash function (`get_request_block_hasher`) hashes the full token
-sequence ending at each block boundary, with a stable per-cache-group
-salt (`BlockHashWithGroupId`) so multiple cache groups (e.g. cross-
-attention KV) can share the pool without collision.
+### Worked example
 
-### Eviction policy
+`block_size = 16`. Request A = "The capital of France is Paris" (say 34 tokens).
+Blocks: `h0 = hash(None, tok[0:16])`, `h1 = hash(h0, tok[16:32])`; the trailing
+2 tokens are a *partial* block → not hashed yet. Request B shares the first 32
+tokens → recomputes `h0, h1`, both hit in `cached_block_hash_to_block`, so B
+allocates **0** new blocks for its prefix and `ref_cnt` of P0,P1 goes 1→2.
+B's prefill therefore skips ~32 tokens of compute. When A frees, P0/P1 stay
+(ref_cnt still 1 from B); only when both free does the LRU make them evictable.
 
-When the pool runs out, the `BlockPool` evicts the **least-recently-
-used unreferenced block** ([`block_pool.py`](vllm/v1/core/block_pool.py)
-`free_blocks` / `_evict_*` helpers). Reference counts are bumped each
-time a logical block points at a physical block, so blocks shared by
-live requests are never evicted.
+### Tradeoffs & failure modes
+
+- Block size: bigger blocks = fewer block-table entries and bigger shared
+  prefixes, but coarser allocation (more waste in the last partial block).
+- Eviction is LRU over *unreferenced* blocks only — a hot shared prefix is never
+  evicted, which is exactly what you want.
 
 ▶ Try it:
-- [`hacks/03_kv_cache_manager.py`](hacks/03_kv_cache_manager.py) —
-  allocate / share / free synthetic requests.
-- [`hacks/04_prefix_cache_hashing.py`](hacks/04_prefix_cache_hashing.py)
-  — show two prompts hash to the same prefix blocks.
+- [`hacks/03_kv_cache_manager.py`](hacks/03_kv_cache_manager.py) — allocate /
+  share / free blocks directly on a `BlockPool`.
+- [`hacks/04_prefix_cache_hashing.py`](hacks/04_prefix_cache_hashing.py) —
+  watch two prompts hash to identical prefix blocks.
 
 ---
 
-## 9. KV cache sizing & memory profiling
+## 10. KV cache sizing & memory profiling
 
-A natural question: *how big is my KV cache, and where does
-`gpu_memory_utilization` actually go?* vLLM answers it at startup with a
-profiling run, not a formula.
+### The problem
 
-1. **Profile.** The worker runs a dummy forward at the max batch shape and
-   measures peak memory:
-   [`vllm/v1/worker/gpu_worker.py:354`](vllm/v1/worker/gpu_worker.py) —
-   `def determine_available_memory(...)`. Free-for-KV bytes ≈
-   `total · gpu_memory_utilization − weights − activations − cudagraphs`.
+How many tokens of KV can you actually hold, and where does
+`gpu_memory_utilization` go? You can't know the activation peak analytically (it
+depends on batch shape and the model), so vLLM **measures** it at startup rather
+than guessing.
+
+### The algorithm
+
+1. **Profile.** The worker runs a dummy forward at the max batch shape and reads
+   peak memory:
+   [`vllm/v1/worker/gpu_worker.py:354`](vllm/v1/worker/gpu_worker.py)
+   `determine_available_memory`. Free-for-KV ≈
+   `total · gpu_memory_utilization − weights − peak_activations − cudagraphs`.
 2. **Spec.** Each attention layer declares a `KVCacheSpec`
    ([`vllm/v1/kv_cache_interface.py:82`](vllm/v1/kv_cache_interface.py);
    `FullAttentionSpec` at [line 175](vllm/v1/kv_cache_interface.py)) whose
-   `page_size_bytes` is the bytes one block costs.
-3. **Blocks.** `get_kv_cache_configs(...)`
+   `page_size_bytes` is the cost of one block.
+3. **Blocks.** `get_kv_cache_configs`
    ([`vllm/v1/core/kv_cache_utils.py:1922`](vllm/v1/core/kv_cache_utils.py))
-   divides the free bytes by the per-block cost to get `num_gpu_blocks`,
-   reconciling layers that share a pool.
+   divides free bytes by the per-block cost → `num_gpu_blocks`, reconciling
+   layers that share a pool.
 
-The arithmetic underneath, for a standard attention layer:
+The arithmetic for a standard attention layer:
 
 ```
 bytes_per_token = 2 (K and V) · num_layers · num_kv_heads · head_dim · dtype_bytes
-block_bytes     = bytes_per_token · block_size            # block_size default 16, vllm/config/cache.py:47
+block_bytes     = bytes_per_token · block_size            # block_size default 16 (vllm/config/cache.py:47)
 num_gpu_blocks  = floor(free_kv_bytes / block_bytes)
-kv_tokens       = num_gpu_blocks · block_size             # total tokens of KV you can hold
+kv_tokens       = num_gpu_blocks · block_size
 ```
 
-GQA shrinks `num_kv_heads`; MLA stores a single compressed latent per
-token instead (§21), which is why DeepSeek's KV cache is so much smaller.
+### Worked example (from hack 15)
+
+An 80 GiB GPU at `util=0.9` (≈72 GiB for KV after a rough weights subtraction),
+`block_size=16`, bf16:
+
+- **Qwen3-8B (GQA, 36 layers, 8 KV heads, head_dim 128):**
+  `bytes/token = 2·36·8·128·2 = 147,456`; `block_bytes ≈ 2.36 MB`;
+  `num_gpu_blocks ≈ 32,768` → **~524K tokens** of KV.
+- **DeepSeek (MLA, 61 layers, latent 512+64):** stores **one** latent per token
+  per layer instead of per-head K/V → far fewer bytes/token → many more tokens
+  in the same VRAM. This is the headline reason MLA models serve long contexts.
+
+### Tradeoffs & failure modes
+
+- Set `util` too high and the profiling headroom is wrong → OOM mid-serving.
+- GQA shrinks `num_kv_heads`; MLA replaces per-head K/V with a latent (§22);
+  quantizing the KV cache halves `dtype_bytes`. All three buy more `kv_tokens`.
 
 ▶ Try it: [`hacks/15_kv_cache_sizing.py`](hacks/15_kv_cache_sizing.py) —
 the calculator above for several real configs, no GPU.
 
 ---
 
-## 10. Multi-tier KV cache offloading
+## 11. Multi-tier KV cache offloading
 
 New in v0.22.0: when the GPU pool is full, KV blocks can be **spilled to a
 slower tier** instead of evicted, then faulted back on a prefix hit.
@@ -462,7 +624,7 @@ slower tier** instead of evicted, then faulted back on a prefix hit.
 ### The manager contract
 
 A block lives in some tier, keyed by an `OffloadKey` (the same block hash
-from §8 + a group id). The scheduler-side contract is
+from §9 + a group id). The scheduler-side contract is
 [`vllm/v1/kv_offload/base.py:110`](vllm/v1/kv_offload/base.py) —
 `class OffloadingManager(ABC)`:
 
@@ -500,57 +662,84 @@ Knobs live in [`vllm/config/offload.py`](vllm/config/offload.py)
 (`OffloadConfig.offload_backend`, `uva.cpu_offload_gb`, and a `prefetch`
 group with `offload_group_size` / `offload_prefetch_step` to hide latency).
 
-This reuses the same `BlockHash` prefix machinery as §8 — an offloaded block
+This reuses the same `BlockHash` prefix machinery as §9 — an offloaded block
 is keyed by its hash, so a later request with a shared prefix faults it back
 instead of recomputing. Cross-tier KV transfer *between engines*
-(disaggregated prefill) is the related `kv_transfer` connector family (§19).
+(disaggregated prefill) is the related `kv_transfer` connector family (§20).
 
 ▶ Try it: revisit [`hacks/03_kv_cache_manager.py`](hacks/03_kv_cache_manager.py)
 — the block-hash + ref-count mechanics offloading is built on.
 
 ---
 
-## 11. Continuous batching, in code
+## 12. Continuous batching, in code
 
-V1 implements "continuous batching" not by per-request batching, but by
-**flattening the entire batch into a single 1-D token sequence per
-step**. The trick is in the `SchedulerOutput`:
+### The problem
 
-- A single concatenated `token_ids` tensor for the step.
-- A `query_start_loc` / `seq_lens` pair telling the attention kernel
-  where each request's tokens live in the flat tensor.
-- Block tables packed as a 2-D tensor `(num_reqs, max_blocks)`.
+§4.1 says we batch at the token level and mix prefill + decode. But GPU kernels
+want *tensors*, not a list of variable-length requests. How do you feed one
+attention kernel a batch where request A contributes 8 prefill tokens, B
+contributes 1 decode token, and C contributes 4?
 
-You can see this packing in
-[`vllm/v1/worker/gpu_input_batch.py`](vllm/v1/worker/gpu_input_batch.py)
-(it builds the actual tensors) and read about why this is correct in
-[`docs/design/paged_attention.md`](docs/design/paged_attention.md). The
-attention backends (next section) accept this layout natively.
+### The layout
 
-**Why this matters for hackers:** prefill and decode share the *same*
-forward pass. There is no separate "prefill model" — the scheduler
-just packs prefill tokens and decode tokens into one tensor and the
-attention kernel handles both via the block table.
+V1 **flattens the whole step into a single 1-D token sequence** and hands the
+attention kernel a few index tensors (built in
+[`vllm/v1/worker/gpu_input_batch.py`](vllm/v1/worker/gpu_input_batch.py)):
+
+- `token_ids` — all scheduled tokens concatenated, no padding.
+- `query_start_loc` — prefix-sum of per-request query lengths, so request *i*'s
+  tokens are `token_ids[qsl[i] : qsl[i+1]]`.
+- `seq_lens` — each request's *total* length (context + this step's tokens), so
+  attention knows how far back to look.
+- `slot_mapping` — for each query token, the flat KV slot
+  (`block_id · block_size + offset`) to write its K/V into.
+- block tables packed as a 2-D `(num_reqs, max_blocks)` tensor.
+
+### Worked example (from hack 16)
+
+A=20 prefill tokens (ctx 0), B=1 decode token (ctx 33), C=6 prefill (ctx 0):
+
+```
+token_ids        : 27 tokens, concatenated (20 + 1 + 6)
+query_start_loc  : [0, 20, 21, 27]      → A=[0:20], B=[20:21], C=[21:27]
+seq_lens         : [20, 34, 6]          → B attends over its full 34-token history
+slot_mapping     : 27 entries, one KV slot per query token
+```
+
+There is **no separate prefill model**: the block table + `slot_mapping` let one
+kernel serve A's prefill, B's decode, and C's prefill in the same launch.
+
+### Tradeoffs
+
+No padding means no wasted FLOPs, but the index bookkeeping is fiddly (and is
+exactly what an attention backend must consume — §13). Read why this is correct
+in [`docs/design/paged_attention.md`](docs/design/paged_attention.md).
 
 ▶ Try it: [`hacks/16_batch_packing.py`](hacks/16_batch_packing.py) —
 build `query_start_loc` / `seq_lens` / `slot_mapping` from a synthetic
-mixed prefill+decode batch, no CUDA.
+mixed batch, no CUDA.
 
 ---
 
-## 12. Attention backends
+## 13. Attention backends
 
-Attention backends are selected at engine init based on hardware,
-dtype, head size, and whether you've requested anything fancy
-(MLA, mamba, etc.).
+### The problem
+
+Attention is the one kernel that must understand the paged layout (§12), and the
+"best" implementation depends on hardware (NVIDIA vs AMD vs CPU), dtype, head
+size, and features (MLA, mamba). vLLM hides this behind a registry so the rest of
+the engine is backend-agnostic.
+
+### How selection works
 
 - [`vllm/v1/attention/backend.py`](vllm/v1/attention/backend.py) —
-  `AttentionBackend` (registry surface) and `AttentionImpl` (kernel
-  base class).
+  `AttentionBackend` (the registry surface) and `AttentionImpl` (the kernel base
+  class every backend implements: take the flat tokens + block table + metadata,
+  return the attention output).
 - [`vllm/v1/attention/selector.py:52`](vllm/v1/attention/selector.py) —
-  `def get_attn_backend(...)`. Reads
-  `VLLM_ATTENTION_BACKEND` env var, dtype, device, and head size, then
-  picks one of:
+  `get_attn_backend(...)` reads `VLLM_ATTENTION_BACKEND`, dtype, device, and head
+  size, then picks:
 
 | Backend file | Use case |
 | --- | --- |
@@ -562,42 +751,62 @@ dtype, head size, and whether you've requested anything fancy
 | [`backends/cpu_attn.py`](vllm/v1/attention/backends/cpu_attn.py) | CPU fallback |
 | [`backends/mla/`](vllm/v1/attention/backends/mla/) | Multi-head Latent Attention (DeepSeek) |
 
-For bit-exact results regardless of how requests batch together, v0.22.0
-adds a **batch-invariant** path
-([`vllm/model_executor/layers/batch_invariant.py`](vllm/model_executor/layers/batch_invariant.py))
-that routes matmuls through reduction-order-stable Cutlass FP8 kernels.
+### Determinism: batch invariance
 
-Cross-link: [`docs/design/attention_backends.md`](docs/design/attention_backends.md)
-covers what authoring a new backend looks like.
+A subtle gotcha: floating-point reductions aren't associative, so the *same*
+prompt can produce *different* logits depending on how requests batched together
+that step. v0.22.0 adds a **batch-invariant** path
+([`vllm/model_executor/layers/batch_invariant.py`](vllm/model_executor/layers/batch_invariant.py))
+that routes matmuls through reduction-order-stable Cutlass FP8 kernels for
+bit-exact, batch-composition-independent results — important for evals and
+debugging. Cross-link: [`docs/design/attention_backends.md`](docs/design/attention_backends.md).
 
 ▶ Try it: [`hacks/09_attention_backend_select.py`](hacks/09_attention_backend_select.py)
 — print the backend chosen for various `(head_size, dtype, device)` tuples.
 
 ---
 
-## 13. Sampling
+## 14. Sampling
 
-[`vllm/v1/sample/sampler.py:20`](vllm/v1/sample/sampler.py) defines
-`class Sampler(nn.Module)`. It receives raw logits from the
-`GPUModelRunner`, runs them through a fixed pipeline:
+### The problem
 
-1. Apply logits processors (from
-   [`vllm/v1/sample/logits_processor/`](vllm/v1/sample/logits_processor/)).
-2. Apply penalties
-   ([`vllm/v1/sample/ops/penalties.py`](vllm/v1/sample/ops/penalties.py)).
-3. Apply bad-words mask
-   ([`ops/bad_words.py`](vllm/v1/sample/ops/bad_words.py)).
-4. Apply temperature / top-k / top-p
-   ([`ops/topk_topp_sampler.py`](vllm/v1/sample/ops/topk_topp_sampler.py)).
-5. Sample (multinomial or argmax depending on temperature).
-6. Compute logprobs if requested
+The model emits raw **logits** (one score per vocab token). Turning those into a
+chosen token id — honoring temperature, top-k/top-p, penalties, banned words,
+and grammar masks — is a fixed pipeline of *logit transforms* followed by a draw.
+
+### The pipeline
+
+[`vllm/v1/sample/sampler.py:20`](vllm/v1/sample/sampler.py) `class Sampler`;
+`forward()` does, in order:
+
+1. **Snapshot raw logprobs** *before* any modification (so reported logprobs
+   reflect the model, not the sampling knobs — a deliberate change from V0).
+2. Cast logits to **float32** (stable softmax).
+3. **`apply_logits_processors`** — the chain in
+   [`vllm/v1/sample/logits_processor/`](vllm/v1/sample/logits_processor/):
+   penalties ([`ops/penalties.py`](vllm/v1/sample/ops/penalties.py)), bad-words
+   masks ([`ops/bad_words.py`](vllm/v1/sample/ops/bad_words.py)), structured-output
+   grammar masks (§21), and any user processor — all just add/subtract from
+   logits or set them to `-inf`.
+4. **`sample()`** — temperature scale, then top-k / top-p truncation
+   ([`ops/topk_topp_sampler.py`](vllm/v1/sample/ops/topk_topp_sampler.py)), then
+   **argmax** (temperature 0 = greedy) or **multinomial** draw.
+5. Gather logprobs/ranks if requested
    ([`ops/logprobs.py`](vllm/v1/sample/ops/logprobs.py)).
 
-For speculative decoding there is a parallel
-[`vllm/v1/sample/rejection_sampler.py`](vllm/v1/sample/rejection_sampler.py)
-that accepts/rejects drafts from a small proposer model.
+### Worked example
 
-Cross-link: [`docs/design/logits_processors.md`](docs/design/logits_processors.md).
+Logits `[2.0, 1.0, 0.5]` over tokens `{Paris, London, Berlin}`:
+
+- **temperature 0** → argmax → "Paris", deterministic.
+- **temperature 1, top-p 0.9** → softmax ≈ `[0.59, 0.22, 0.13]`(+tail); top-p
+  keeps the smallest set summing ≥0.9 (here Paris+London), renormalizes, draws.
+- a **bad-words** mask on "Paris" sets its logit to `-inf` → it can never be
+  drawn, and the mass shifts to London/Berlin.
+
+For speculative decoding there's a parallel
+[`rejection_sampler.py`](vllm/v1/sample/rejection_sampler.py) that accepts/rejects
+a draft model's proposed tokens while preserving the target distribution.
 
 ▶ Try it:
 - [`hacks/07_sampler.py`](hacks/07_sampler.py) — hand-crafted logits
@@ -607,23 +816,32 @@ Cross-link: [`docs/design/logits_processors.md`](docs/design/logits_processors.m
 
 ---
 
-## 14. Request lifecycle & output
+## 15. Request lifecycle & output
 
-A `Request` ([`vllm/v1/request.py:59`](vllm/v1/request.py)) carries
-everything about an in-flight generation: tokens so far, sampling
-params, multi-modal inputs, structured-output state, KV block table,
-arrival time, and current `RequestStatus`
-([line 315](vllm/v1/request.py)).
+A `Request` ([`vllm/v1/request.py:59`](vllm/v1/request.py)) is the engine's
+unit of state: tokens so far, sampling params, multimodal inputs,
+structured-output state, KV block table, arrival time, and current
+`RequestStatus` ([line 315](vllm/v1/request.py)). It moves through the state
+machine the scheduler drives (admit → run → preempt/finish):
+
+```mermaid
+stateDiagram-v2
+  [*] --> WAITING
+  WAITING --> RUNNING : schedule() admits
+  RUNNING --> WAITING : preempted (KV pressure)
+  RUNNING --> FINISHED_STOPPED : EOS / stop string
+  RUNNING --> FINISHED_LENGTH_CAPPED : max_tokens reached
+  RUNNING --> FINISHED_ABORTED : client cancel
+```
 
 On the way *out*,
 [`vllm/v1/engine/output_processor.py:110`](vllm/v1/engine/output_processor.py)
-— `class OutputProcessor` — owns one
-`RequestOutputCollector` per active request. It:
-
-- Detokenizes new token ids (handles partial-utf8 boundaries).
-- Stitches streaming chunks for the OpenAI API.
-- Decides when a request is "done from the client's perspective",
-  even if the engine kept going for a step (e.g. EOS-on-the-wire).
+— `class OutputProcessor` — owns one `RequestOutputCollector` per active request
+and does the work the engine core shouldn't: **detokenize** new ids (handling
+partial-UTF-8 boundaries — a multi-byte char split across two steps must not emit
+mojibake), stitch streaming chunks for the OpenAI API, and decide when a request
+is done *from the client's perspective* even if the engine ran an extra step.
+This runs in the front-end process, off the hot loop.
 
 ▶ Try it:
 - [`hacks/02_request_lifecycle.py`](hacks/02_request_lifecycle.py) —
@@ -633,7 +851,7 @@ On the way *out*,
 
 ---
 
-## 15. Model loading & the model registry
+## 16. Model loading & the model registry
 
 How does `LLM(model="…")` become an `nn.Module` with weights? Three steps,
 all before the first `step()`:
@@ -657,7 +875,8 @@ all before the first `step()`:
    Loader variants (safetensors, bitsandbytes, GGUF, …) all implement the
    `BaseModelLoader` ABC ([line 25](vllm/model_executor/model_loader/base_loader.py)).
 3. **Place.** Weights are sharded across TP/PP ranks as they load; the
-   module's own `load_weights` maps checkpoint names → vLLM parameters.
+   module's own `load_weights` maps checkpoint tensor names → vLLM parameters
+   (and fuses, e.g., separate q/k/v checkpoints into one `qkv_proj`).
 
 This is the *construction* side of what the companion
 [Architecture explorer](https://phi9t.github.io/vllm/) *renders* — the
@@ -669,21 +888,22 @@ KV-cache footprint from its config (GQA vs MLA, dense vs MoE).
 
 ---
 
-## 16. Workers & executors
+## 17. Workers & executors
 
 The **executor** owns one or more **workers**, each of which owns
 one `GPUModelRunner`. The runner is what holds the actual `nn.Module`
-and the CUDA graphs.
+and the CUDA graphs. The layering exists so the scheduler can stay
+single-threaded and synchronous (§7) while execution fans out to N GPUs.
 
 - [`vllm/v1/worker/gpu_model_runner.py:415`](vllm/v1/worker/gpu_model_runner.py)
   — `class GPUModelRunner`.
 - [`vllm/v1/worker/gpu_model_runner.py:3955`](vllm/v1/worker/gpu_model_runner.py)
   — `def execute_model(scheduler_output)`. Steps it performs:
   1. Build input tensors from `SchedulerOutput` (via
-     [`gpu_input_batch.py`](vllm/v1/worker/gpu_input_batch.py)).
+     [`gpu_input_batch.py`](vllm/v1/worker/gpu_input_batch.py), §12).
   2. Call the model forward — replays a CUDA graph if the batch shape
-     matches a captured one, otherwise eager.
-  3. Hand logits to the `Sampler`.
+     matches a captured one, otherwise eager (§19).
+  3. Hand logits to the `Sampler` (§14).
   4. Return `ModelRunnerOutput` (sampled tokens + optional logprobs).
 - [`vllm/v1/worker/gpu_worker.py`](vllm/v1/worker/gpu_worker.py) —
   `class Worker`; its `execute_model` is a thin shim forwarding to the
@@ -691,14 +911,11 @@ and the CUDA graphs.
 - [`vllm/v1/worker/worker_base.py`](vllm/v1/worker/worker_base.py) —
   `class WorkerBase` (the interface every backend implements).
 
-Cross-link: [`docs/design/cuda_graphs.md`](docs/design/cuda_graphs.md)
-explains how runners capture and replay graphs (§18).
-
 ▶ Try it: [`hacks/11_executor_uniproc.py`](hacks/11_executor_uniproc.py).
 
 ---
 
-## 17. Model Runner V2
+## 18. Model Runner V2
 
 The V1 runner ([`vllm/v1/worker/gpu_model_runner.py`](vllm/v1/worker/gpu_model_runner.py),
 ~6000 lines) accreted every model's special-case over time. v0.22.0
@@ -724,103 +941,110 @@ hard design constraint:
   [`vllm/config/vllm.py`](vllm/config/vllm.py) rather than flipped on globally.
 
 MRV2 keeps the same external contract — it consumes `SchedulerOutput` and
-returns `ModelRunnerOutput`, so §6's step loop is unchanged.
+returns `ModelRunnerOutput`, so §7's step loop is unchanged.
 
 ▶ Try it: [`hacks/12_engine_step.py`](hacks/12_engine_step.py) — the step
 contract MRV2 preserves.
 
 ---
 
-## 18. CUDA graphs & torch.compile
+## 19. CUDA graphs & torch.compile
 
-Eager PyTorch has per-op launch overhead that dominates at small decode
-batch sizes. vLLM captures the forward into **CUDA graphs** and replays
-them, and uses `torch.compile` for kernel fusion.
+### The problem
+
+Per §4.4, decode launches many *tiny* kernels; on a fast GPU the CPU-side launch
+overhead (microseconds each) can dominate the actual compute. **CUDA graphs**
+record a sequence of kernel launches once and replay the whole thing with a
+single call; **`torch.compile`** fuses ops to cut both launches and memory
+traffic.
+
+### The mechanism
 
 - [`vllm/v1/worker/gpu_model_runner.py:6150`](vllm/v1/worker/gpu_model_runner.py)
-  — `def capture_model()`. At startup it captures the graph at each of a
-  set of batch sizes.
+  — `def capture_model()`: at startup, capture the forward at each of a set of
+  batch sizes.
 - [`vllm/config/compilation.py:53`](vllm/config/compilation.py) —
-  `class CUDAGraphMode`: `NONE`, `PIECEWISE` (graph the compiled regions,
-  leave attention eager), `FULL` (graph the whole forward), and
-  `FULL_AND_PIECEWISE` ([line 63](vllm/config/compilation.py)) — the **V1
-  default**, which captures full graphs for pure-decode batches and
-  piecewise for mixed prefill.
-- The captured batch sizes come from `cudagraph_capture_sizes`
-  ([`compilation.py:622`](vllm/config/compilation.py)). At run time a batch
-  is **padded up to the nearest captured size**; batches larger than the
-  max fall back to eager.
+  `class CUDAGraphMode`: `NONE`, `PIECEWISE` (graph the compiled regions, leave
+  attention eager — needed because attention's shapes vary), `FULL` (graph the
+  whole forward), and `FULL_AND_PIECEWISE`
+  ([line 63](vllm/config/compilation.py)) — the **V1 default**: full graphs for
+  pure-decode batches (fixed shape) and piecewise for mixed prefill.
+- A graph is captured per fixed batch size (`cudagraph_capture_sizes`,
+  [`compilation.py:622`](vllm/config/compilation.py)). At run time a batch is
+  **padded up to the nearest captured size**; batches above the max fall back to
+  eager.
 
-DeepSeek V4 (§21) is a v0.22.0 beneficiary: it now supports both full and
-piecewise capture.
+### Worked example (from hack 18)
+
+Capture sizes `[1,2,4,8,16,24,32,48,…]`. A batch of 7 replays the **size-8**
+graph (1 token of padding wasted). A batch of 33 replays **size-48** (15 wasted).
+A batch of 300 (> max) runs eager. More capture sizes → less padding waste but
+more capture time and memory. DeepSeek V4 (§22) is a v0.22.0 beneficiary: it now
+supports both full and piecewise capture.
 
 ▶ Try it: [`hacks/18_cudagraph_bucketing.py`](hacks/18_cudagraph_bucketing.py)
 — given a capture-size list, show which padded size each batch rounds to.
 
 ---
 
-## 19. Multi-GPU / distributed
+## 20. Multi-GPU / distributed
 
-Single-process and multi-process / Ray all sit behind one ABC:
+Single-process and multi-process / Ray all sit behind one ABC, so the engine
+core (§7) never knows how many GPUs there are:
 
 - [`vllm/v1/executor/abstract.py:37`](vllm/v1/executor/abstract.py) —
   `class Executor(ABC)`.
 - [`vllm/v1/executor/uniproc_executor.py:45`](vllm/v1/executor/uniproc_executor.py)
   — `class UniProcExecutor` (single process, easiest to debug).
 - [`vllm/v1/executor/multiproc_executor.py:102`](vllm/v1/executor/multiproc_executor.py)
-  — `class MultiprocExecutor` (one OS process per GPU).
+  — `class MultiprocExecutor` (one OS process per GPU; the runner broadcasts the
+  `SchedulerOutput`, each rank runs its shard, ranks all-reduce).
 - [`vllm/v1/executor/ray_executor.py`](vllm/v1/executor/ray_executor.py)
   — `class RayDistributedExecutor` (multi-node).
 
-The cross-process boundary between the engine front-end and
-`EngineCoreProc` is mediated by
-[`vllm/v1/engine/core_client.py`](vllm/v1/engine/core_client.py) —
-`EngineCoreClient` is the ZMQ stub used by `AsyncLLM`. Disaggregated
-prefill/decode and KV transfer between engines live under
-[`vllm/distributed/kv_transfer/`](vllm/distributed/kv_transfer/)
-(connectors: NIXL, Mooncake store, LMCache, …).
-
-Cross-link: [`docs/design/multiprocessing.md`](docs/design/multiprocessing.md).
+The cross-process boundary between the engine front-end and `EngineCoreProc` is
+mediated by [`vllm/v1/engine/core_client.py`](vllm/v1/engine/core_client.py)
+(`EngineCoreClient`, the ZMQ stub `AsyncLLM` uses). Disaggregated prefill/decode
+and KV transfer between engines live under
+[`vllm/distributed/kv_transfer/`](vllm/distributed/kv_transfer/) (connectors:
+NIXL, Mooncake store, LMCache) — the inter-engine cousin of §11's intra-engine
+tiering. Cross-link: [`docs/design/multiprocessing.md`](docs/design/multiprocessing.md).
 
 ---
 
-## 20. Advanced features
+## 21. Advanced features
 
-These all reuse the same scheduler / KV manager / sampler — they
-**don't** fork the request path.
+These all reuse the same scheduler / KV manager / sampler — per §4.1 they
+**don't** fork the request path, they just set the two counters differently.
 
 ### Chunked prefill
-Already in §7. It lets a long prompt's prefill be sliced across multiple
-engine steps so it doesn't starve decode requests.
+A long prompt's prefill is sliced across steps (capped by
+`long_prefill_token_threshold`, §8) so it can't starve everyone's decode. In the
+unified model this is just "assign part of the catch-up this step."
 
 ### Prefix caching
-Already in §8. Implemented as block-hash-based deduplication in
-`KVCacheManager` + `BlockPool`. With v0.22.0's offloading (§10), evicted
-prefix blocks can survive in a lower tier.
+Block-hash dedup in `KVCacheManager` + `BlockPool` (§9). With v0.22.0's
+offloading (§11), evicted prefix blocks can survive in a lower tier.
 Cross-link: [`docs/design/prefix_caching.md`](docs/design/prefix_caching.md).
 
 ### Speculative decoding
-Drafters live in [`vllm/v1/spec_decode/`](vllm/v1/spec_decode/):
-
-- [`eagle.py`](vllm/v1/spec_decode/eagle.py) — EAGLE drafter.
-- [`medusa.py`](vllm/v1/spec_decode/medusa.py) — Medusa heads.
-- [`ngram_proposer.py`](vllm/v1/spec_decode/ngram_proposer.py) —
-  N-gram match drafting.
-- v0.22.0 adds **custom-callable proposers** and MTP (multi-token
-  prediction) for DeepSeek V4, incl. on ROCm.
-- Acceptance/rejection in
-  [`vllm/v1/sample/rejection_sampler.py`](vllm/v1/sample/rejection_sampler.py).
+A cheap proposer guesses several tokens; the target model verifies them in one
+forward; a rejection sampler (§14) keeps the exact target distribution. Drafters
+in [`vllm/v1/spec_decode/`](vllm/v1/spec_decode/): `eagle.py`, `medusa.py`,
+`ngram_proposer.py`; v0.22.0 adds **custom-callable proposers** and MTP for
+DeepSeek V4 (incl. ROCm). In the unified model, `num_tokens_with_spec` is just
+larger by the draft length.
 
 ### Structured / guided decoding
 [`vllm/v1/structured_output/__init__.py`](vllm/v1/structured_output/__init__.py)
-— `class StructuredOutputManager`. Plug-in backends: `backend_xgrammar.py`,
+`StructuredOutputManager` produces a per-step logit mask (which tokens keep the
+output valid JSON/grammar) that the §14 logits-processor chain applies — same
+hook point as user processors. Backends: `backend_xgrammar.py`,
 `backend_outlines.py`, `backend_guidance.py`, `backend_lm_format_enforcer.py`.
-The manager produces logit masks each step that the `Sampler`'s logits-
-processor chain applies — same hook point as user processors.
 
 ---
 
-## 21. DeepSeek V4
+## 22. DeepSeek V4
 
 v0.22.0 promotes DeepSeek V4 from a single model file into a **dedicated
 package**, [`vllm/models/deepseek_v4/`](vllm/models/deepseek_v4/), registered
@@ -859,7 +1083,7 @@ context: the indexer caps how many tokens the MLA kernel actually touches.
 - [`attention.py:95`](vllm/models/deepseek_v4/attention.py) —
   `DeepseekV4MLAModules` bundles the projections: a `fused_wqa_wkv` down-proj,
   `q_norm`/`kv_norm`, `wq_b` up-proj, `wo_a`/`wo_b` output, an `attn_sink`,
-  and the `indexer`. The compressed latent KV (§9) is what keeps V4's cache
+  and the `indexer`. The compressed latent KV (§10) is what keeps V4's cache
   tiny; the indexer keeps the *compute* sparse on top of that.
 - [`attention.py:606`](vllm/models/deepseek_v4/attention.py) —
   `class DeepseekV4MLAAttention`, the inner attention module.
@@ -869,8 +1093,8 @@ context: the indexer caps how many tokens the MLA kernel actually touches.
 - [`quant_config.py:27`](vllm/models/deepseek_v4/quant_config.py) —
   `class DeepseekV4FP8Config`; the package carries **NVFP4 fused-MoE** kernels
   and a `compressor.py`, with an `amd/` subtree for ROCm parity.
-- **Full + piecewise CUDA graphs** (§18) and **MTP speculative decoding**
-  (§20) now work for V4, including on ROCm.
+- **Full + piecewise CUDA graphs** (§19) and **MTP speculative decoding**
+  (§21) now work for V4, including on ROCm.
 
 The companion [Architecture explorer](https://phi9t.github.io/vllm/) already
 visualizes DeepSeek-**V3** as an MLA + MoE residual circuit; V4 keeps that
@@ -881,7 +1105,7 @@ compute the MLA + MoE parameter / KV breakdown from a DeepSeek-style config.
 
 ---
 
-## 22. The serving layer
+## 23. The serving layer
 
 ```mermaid
 flowchart LR
@@ -893,6 +1117,9 @@ flowchart LR
   A -- AsyncGenerator RequestOutput --> S
   S -- SSE / JSON chunks --> H
 ```
+
+The serving layer is "just" the front-end (§5) wearing an HTTP coat — it owns no
+engine logic, only request translation and streaming.
 
 - [`vllm/entrypoints/openai/api_server.py`](vllm/entrypoints/openai/api_server.py)
   — `build_async_engine_client(...)` builds the `AsyncLLM` process and
@@ -908,14 +1135,15 @@ a particular `SamplingParams` field.
 
 ---
 
-## 23. Rust frontend
+## 24. Rust frontend
 
 v0.22.0 moves an **experimental Rust serving frontend** in-tree at
 [`rust/`](rust/) (`vllm-frontend-rs`, originally
 [Inferact/vllm-frontend-rs](https://github.com/Inferact/vllm-frontend-rs)).
 It rebuilds the **northbound serving layer** in Rust while still talking to
 the **Python `EngineCore` process(es) over the existing ZMQ boundary** — it
-does *not* reimplement the scheduler, KV manager, or model runner.
+does *not* reimplement the scheduler, KV manager, or model runner. (The clean
+process split from §3 is exactly what makes this swap possible.)
 
 It's a Cargo workspace ([`rust/Cargo.toml`](rust/Cargo.toml)) layered
 bottom-up:
@@ -925,21 +1153,21 @@ bottom-up:
 | `text` → `chat` | minimal text + chat facades (templating, message handling) |
 | `server` | OpenAI-compatible HTTP server above `chat` |
 | `llm` | the high-level generate/stream API |
-| `engine-core-client` | the ZMQ stub to the Python `EngineCore` (mirrors `core_client.py`, §19) |
+| `engine-core-client` | the ZMQ stub to the Python `EngineCore` (mirrors `core_client.py`, §20) |
 | `tokenizer` | tokenization |
 | `tool-parser`, `reasoning-parser` | streaming tool-call / reasoning parsers for chat completions |
 | `metrics` | request / scheduler / API-server metrics |
 | `cmd` | the `vllm-rs` CLI entrypoint ([`rust/src/cmd/src/main.rs:78`](rust/src/cmd/src/main.rs), `fn main`) |
 
 So the boundary is exactly where the Python front-end already splits from the
-engine (§22 ↔ §19): the Rust side owns request rendering, tokenization,
+engine (§23 ↔ §20): the Rust side owns request rendering, tokenization,
 parsing, routing, and metrics; the Python side owns the engine. Treat it as
-experimental and not feature-complete; the Python entrypoints (§22) remain
-the default.
+experimental and not feature-complete; the Python entrypoints (§23) remain the
+default.
 
 ---
 
-## 24. Where to go next
+## 25. Where to go next
 
 In-tree design docs that go deeper than this guide:
 
@@ -958,11 +1186,12 @@ In-tree design docs that go deeper than this guide:
 - [`docs/usage/v1_guide.md`](docs/usage/v1_guide.md) — feature-support
   matrix (what works on V1 vs. not yet).
 - The [vLLM Explorer](https://phi9t.github.io/vllm/) — this guide's
-  interactive companion (Component Deep Dive + Model Architecture circuits).
+  interactive companion (Component Deep Dive + Model Architecture circuits +
+  this guide as a page).
 
 ---
 
-## 25. Hands-on hacks
+## 26. Hands-on hacks
 
 [`hacks/`](hacks/) is a directory of small, runnable scripts that
 exercise each subsystem **in isolation**. Most need no model weights,
@@ -971,24 +1200,24 @@ each script is paired with a section of this guide.
 
 | # | Script | Pairs with | One-liner |
 | --- | --- | --- | --- |
-| 01 | [`hacks/01_llm_smoke.py`](hacks/01_llm_smoke.py) | §4 | Full pipeline on `facebook/opt-125m`. Needs `VLLM_HACK_RUN_MODEL=1`. |
-| 02 | [`hacks/02_request_lifecycle.py`](hacks/02_request_lifecycle.py) | §14 | Walk `Request` through `RequestStatus`. |
-| 03 | [`hacks/03_kv_cache_manager.py`](hacks/03_kv_cache_manager.py) | §8, §10 | Allocate / share / free blocks across two requests with a common prefix. |
-| 04 | [`hacks/04_prefix_cache_hashing.py`](hacks/04_prefix_cache_hashing.py) | §8 | Show two prompts hash to identical prefix blocks. |
-| 05 | [`hacks/05_scheduler_step.py`](hacks/05_scheduler_step.py) | §7 | One `schedule()` tick with three synthetic requests. |
-| 06 | [`hacks/06_chunked_prefill.py`](hacks/06_chunked_prefill.py) | §7 | Long prompt sliced across multiple steps. |
-| 07 | [`hacks/07_sampler.py`](hacks/07_sampler.py) | §13 | Logits through temperature, top-k, top-p, penalties side by side. |
-| 08 | [`hacks/08_logits_processor.py`](hacks/08_logits_processor.py) | §13 | A 20-line custom processor that bans one token. |
-| 09 | [`hacks/09_attention_backend_select.py`](hacks/09_attention_backend_select.py) | §12 | Print backend chosen for various `(head_size, dtype, device)` tuples. |
-| 10 | [`hacks/10_output_processor.py`](hacks/10_output_processor.py) | §14 | Feed synthetic `ModelRunnerOutput` to the detokenizer. |
-| 11 | [`hacks/11_executor_uniproc.py`](hacks/11_executor_uniproc.py) | §16 | `UniProcExecutor` with a no-op worker. |
-| 12 | [`hacks/12_engine_step.py`](hacks/12_engine_step.py) | §6, §17 | **Capstone:** wire 03 + 05 + 07 + 10 into one full engine step, zero CUDA. |
-| 13 | [`hacks/13_async_llm_stream.py`](hacks/13_async_llm_stream.py) | §4 | Stream tokens from a real tiny model. Needs `VLLM_HACK_RUN_MODEL=1`. |
-| 14 | [`hacks/14_input_processor.py`](hacks/14_input_processor.py) | §5 | Prompt → token ids → `EngineCoreRequest` shape, no model. |
-| 15 | [`hacks/15_kv_cache_sizing.py`](hacks/15_kv_cache_sizing.py) | §9 | KV-cache sizing calculator (GQA vs MLA), pure arithmetic. |
-| 16 | [`hacks/16_batch_packing.py`](hacks/16_batch_packing.py) | §11 | Pack a mixed prefill+decode batch into `query_start_loc` / `seq_lens`. |
-| 17 | [`hacks/17_model_registry.py`](hacks/17_model_registry.py) | §15, §21 | Registry/`get_model` API + param & KV footprint from a config. |
-| 18 | [`hacks/18_cudagraph_bucketing.py`](hacks/18_cudagraph_bucketing.py) | §18 | Round batch sizes up to captured CUDA-graph buckets. |
+| 01 | [`hacks/01_llm_smoke.py`](hacks/01_llm_smoke.py) | §5 | Full pipeline on `facebook/opt-125m`. Needs `VLLM_HACK_RUN_MODEL=1`. |
+| 02 | [`hacks/02_request_lifecycle.py`](hacks/02_request_lifecycle.py) | §15 | Walk `Request` through `RequestStatus`. |
+| 03 | [`hacks/03_kv_cache_manager.py`](hacks/03_kv_cache_manager.py) | §9, §11 | Allocate / share / free blocks across two requests with a common prefix. |
+| 04 | [`hacks/04_prefix_cache_hashing.py`](hacks/04_prefix_cache_hashing.py) | §9 | Show two prompts hash to identical prefix blocks. |
+| 05 | [`hacks/05_scheduler_step.py`](hacks/05_scheduler_step.py) | §8 | One `schedule()` tick with three synthetic requests. |
+| 06 | [`hacks/06_chunked_prefill.py`](hacks/06_chunked_prefill.py) | §8 | Long prompt sliced across multiple steps. |
+| 07 | [`hacks/07_sampler.py`](hacks/07_sampler.py) | §14 | Logits through temperature, top-k, top-p, penalties side by side. |
+| 08 | [`hacks/08_logits_processor.py`](hacks/08_logits_processor.py) | §14 | A 20-line custom processor that bans one token. |
+| 09 | [`hacks/09_attention_backend_select.py`](hacks/09_attention_backend_select.py) | §13 | Print backend chosen for various `(head_size, dtype, device)` tuples. |
+| 10 | [`hacks/10_output_processor.py`](hacks/10_output_processor.py) | §15 | Feed synthetic `ModelRunnerOutput` to the detokenizer. |
+| 11 | [`hacks/11_executor_uniproc.py`](hacks/11_executor_uniproc.py) | §17, §20 | `UniProcExecutor` with a no-op worker. |
+| 12 | [`hacks/12_engine_step.py`](hacks/12_engine_step.py) | §7, §18 | **Capstone:** wire 03 + 05 + 07 + 10 into one full engine step, zero CUDA. |
+| 13 | [`hacks/13_async_llm_stream.py`](hacks/13_async_llm_stream.py) | §5 | Stream tokens from a real tiny model. Needs `VLLM_HACK_RUN_MODEL=1`. |
+| 14 | [`hacks/14_input_processor.py`](hacks/14_input_processor.py) | §6 | Prompt → token ids → `EngineCoreRequest` shape. |
+| 15 | [`hacks/15_kv_cache_sizing.py`](hacks/15_kv_cache_sizing.py) | §10 | KV-cache sizing arithmetic (GQA vs MLA). |
+| 16 | [`hacks/16_batch_packing.py`](hacks/16_batch_packing.py) | §12 | Flatten a mixed prefill+decode batch into index tensors. |
+| 17 | [`hacks/17_model_registry.py`](hacks/17_model_registry.py) | §16, §22 | Registry/`get_model` API + param & KV footprint from a config. |
+| 18 | [`hacks/18_cudagraph_bucketing.py`](hacks/18_cudagraph_bucketing.py) | §19 | Round batch sizes up to captured CUDA-graph buckets. |
 
 Shared stubs (`FakeModelRunner`, helpers, …) live in
 [`hacks/_stubs.py`](hacks/_stubs.py).
@@ -1001,7 +1230,7 @@ first signal.
 
 ---
 
-## 26. Contributing
+## 27. Contributing
 
 Read [`AGENTS.md`](AGENTS.md) **before** opening a PR. Highlights:
 
