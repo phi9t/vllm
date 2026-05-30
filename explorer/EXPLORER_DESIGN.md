@@ -55,14 +55,25 @@ Theme is **dark-only** (`color-scheme: dark`). Glows/scrollbars use the non-them
 
 Canonical structure in [`src/App.tsx`](src/App.tsx):
 
-- A top-level `useState` holds the active `family` (here `'data' | 'components' | 'architecture'`).
+- App holds a **typed `ExplorerMode[]` registry** (`MODES`) and a top-level `useState`
+  for the active mode id. Each entry is `{ id, label, icon, subtitle, View }` per the
+  [`ExplorerMode`](src/explorer-kit/mode.ts) contract; the body renders `active.View`,
+  so **adding a mode is one array entry — no new conditional**. (Decision: the contract
+  documents the shared shape but does *not* hoist data loading into a generic shell —
+  each `View` stays its own index→manifest reader.)
+- Each mode view receives **`{ navigate(id) }`** (`ExplorerModeProps`). This is the
+  general cross-link mechanism (R3): e.g. Component's drawer calls `navigate('architecture')`.
+  It replaced the old bespoke `onOpenArchitecture` callback.
 - `.observatory-bg` is a fixed `aria-hidden` layer; content sits in `.explorer-container`
   (centered, `max-width: 1600px`, 24px padding, flex-column, 24px gap).
-- The header has a `.skip-link`, a back-to-repo link, logo + `<h1>` (gradient text) + a
-  per-family subtitle, and a `.family-switch` nav of `.family-switch-btn` buttons
-  (`aria-pressed`, active gradient).
-- The body conditionally renders one explorer per family.
+- The header has a `.skip-link`, a back-to-repo link, logo + `<h1>` (gradient text) + the
+  active mode's subtitle, and a `.family-switch` nav of `.family-switch-btn` buttons
+  (`aria-pressed`, active gradient) mapped from `MODES`.
 - Responsive: `.dashboard-grid` is `320px 1fr` desktop, collapsing to one column at 1024px.
+- **In-mode controls** (subject switcher + sub-view tabs + param sliders) are laid out with
+  Tailwind utility rows, *not* a dedicated `Toolbar` primitive — that was evaluated and
+  intentionally left unextracted to avoid forcing a one-size layout on three differently
+  shaped control rows. The reusable pieces are `SubjectSwitcher` / `ViewTabs` / `Slider`.
 
 ## Data + helpers contract
 
@@ -89,14 +100,29 @@ Canonical structure in [`src/App.tsx`](src/App.tsx):
   circuit are not hard-coded — they are computed per-manifest from monospace text length:
   `width = chars × fontSize × ADV` (ADV ≈ 0.62, Fira Code 600-weight advance in viewBox units).
   `cardWidth(label, kindTag, worstMetric)` measures the worst of the label+tag line and the
-  widest lens metric (shapes/compute/memory at `MAX_TOKENS`), adds padding and comfort margin,
-  and takes the max over all blocks in the manifest. Mainline boxes (`MAIN_W`) and branch panel
-  boxes (`CARD_W`) are computed independently; floors are enforced (`MAIN_W_MIN=180`,
-  `CARD_W_MIN=240`). `MAINLINE_X`, `CARD_X`, `SHELL_LEFT/RIGHT`, and `VIEW_W` all derive from
-  these measured widths. The invariant is enforced in
-  [`src/architecture/ModelCircuit.tsx`](src/architecture/ModelCircuit.tsx) — see the top-of-file
-  comment. The shared lens formatter `lensMetric()` lives in `blockTypes.ts` so both the
-  explorer panel and the width-measurement code use identical formatting.
+  widest lens metric, adds padding and comfort margin, and takes the max over all blocks in the
+  manifest. Mainline boxes (`MAIN_W`) and branch panel boxes (`CARD_W`) are computed
+  independently; floors are enforced (`MAIN_W_MIN=180`, `CARD_W_MIN=240`). `MAINLINE_X`,
+  `CARD_X`, `SHELL_LEFT/RIGHT`, and `VIEW_W` all derive from these measured widths. The invariant
+  is enforced in [`src/architecture/ModelCircuit.tsx`](src/architecture/ModelCircuit.tsx) — see
+  the top-of-file comment. The shared lens formatter `lensMetric()` lives in `blockTypes.ts` so
+  both the explorer panel and the width-measurement code use identical formatting.
+
+  **Measure the worst metric across the *whole* token range, not just `MAX_TOKENS`.** The longest
+  metric *string* is not always at 4096 — e.g. the memory lens renders `KV 999.9 KiB` (wider)
+  at a mid token count vs `KV 4.5 MiB` at 4096. `computeLayout` therefore samples a geometric
+  sweep of token counts over `[8, MAX_TOKENS]` and keeps the longest `lensMetric` per block, so
+  boxes fit at **every** slider position, not just the maximum.
+
+- **Hierarchy containment is structural (outline ⊇ panels ⊇ text).** The dashed layer-group
+  outline is computed from the *real* branch-panel extents — from the topmost header-pill top
+  (`yJunc − PILL_OVER`) down to the bottommost tee dot (`yTee + TEE_OVER`), plus a fixed
+  `BRACKET_M` margin — so the outline always fully wraps the transformer blocks it groups.
+  Groups are placed by walking a running `cursor` (lowest occupied edge) so adjacent groups and
+  their label chips never overlap and keep a `GROUP_GAP`. Combined with the width invariant
+  above, the three containment relations (group-outline ⊇ block-panels ⊇ box-text) are all
+  enforced by construction. A standalone numeric replay of the layout asserts pills/tees stay
+  inside every bracket with margin for all four models.
 
   **Succinct block text (R1 companion rule).** Block labels must be terse — target ≤ ~22 chars,
   hard ceiling 24. Prefer the short symbol form: `Q down-proj (A)`, `MLA attention`,
@@ -120,6 +146,17 @@ contract, portability, state model, generality) see
 - Cyan selection glow: `stroke=#38bdf8`, `strokeWidth=2` on selected node border.
 - Tinted branch panels: `fillOpacity=0.05`, accent stroke `strokeOpacity=0.22`.
 - Header pills on branch panels: near-black fill, accent stroke.
+- **Layer-group outlines are accent-tinted per group + carry a solid label chip.** The accent
+  is *derived* from the group's branches (the FFN/MoE branch's color) — no schema field — so a
+  dense group reads indigo and a MoE group reads pink (e.g. DeepSeek-V3's dense×3 vs MoE×58 are
+  immediately distinct). The chip (group label `× repeat`) is drawn on a top layer so the rail
+  and panels never occlude it.
+- **Decoration text lives in hover tooltips, not on the canvas.** Small/vague mainline
+  annotations — the `+`-junction branch labels, the `residual stream` rail label, and the
+  `input_ids` / `output logits` endpoints — are surfaced as SVG `<title>` tooltips (with a wide
+  transparent hit-line on the thin rail, and small accent end-caps as hover targets) rather than
+  always-on labels that clutter the diagram. The svg keeps its `role="group"` aria-label so the
+  input-bottom/output-top orientation stays announced.
 - Comfort margins: `COMFORT=16`, `PAD_L=16`, `PAD_R=14`, `PRENORM_GAP=16`.
 - Body-text scale: label 12 px mono 600; metric 9 px mono; kind tag 7.5 px.
 - `maxWidth`-capped SVG (`style={{ maxWidth: VIEW_W * 1.12 }}`).
@@ -137,8 +174,12 @@ contract, portability, state model, generality) see
 
 ## Building a new explorer mode
 
-1. Add a `family` id + entry to `FAMILIES` in `App.tsx`.
-2. Create `src/<mode>/<Mode>Explorer.tsx`, loading its manifest with `fetchExplorerJson`.
-3. Add a generator under `scripts/` that emits the manifest into `public/data/`.
-4. Reuse `Card`/`Button`/`Slider`, the `.panel`/`.diagram-*`/`.drawer` classes, and the
+1. Add one `ExplorerMode` entry to the `MODES` registry in `App.tsx`
+   (`{ id, label, icon, subtitle, View }`).
+2. Create `src/<mode>/<Mode>Explorer.tsx` as an `ExplorerModeProps` component
+   (`{ navigate }`), loading its `index.json` then per-subject manifest with
+   `fetchExplorerJson`. Use `navigate(id)` for any cross-link to another mode.
+3. Add a generator under `scripts/` that emits the index + manifests into `public/data/`.
+4. Reuse the kit (`AsyncBoundary`, `SubjectSwitcher`, `ViewTabs`, `DetailDrawer`),
+   `Card`/`Button`/`Slider`, the `.panel`/`.diagram-*`/`.drawer` classes, and the
    `dashboard-grid` + drawer layout. Keep the dark tokens; don't introduce a light theme.

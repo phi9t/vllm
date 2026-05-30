@@ -29,12 +29,22 @@ one-off front-end.
 **Rule.** Box widths are NEVER hard-coded. They are computed per-manifest from monospace text
 length using `width = chars × fontSize × ADV` (ADV ≈ 0.62, Fira Code 600-weight advance in
 viewBox units). `cardWidth(label, kindTag, worstMetric)` measures the worst of the
-label+tag line and the widest lens metric (shapes / compute / memory at `MAX_TOKENS`), adds
+label+tag line and the widest lens metric (shapes / compute / memory), adds
 `PAD_L + PAD_R + TAG_GAP + COMFORT`, and takes the max over all blocks in the manifest.
 Mainline boxes (`MAIN_W`) and branch-panel boxes (`CARD_W`) are computed independently; floors
 are enforced (`MAIN_W_MIN=180`, `CARD_W_MIN=240`). `MAINLINE_X`, `CARD_X`, `SHELL_LEFT/RIGHT`,
 and `VIEW_W` all derive from these measured widths. See the top-of-file INVARIANT comment in
 [`src/architecture/ModelCircuit.tsx`](src/architecture/ModelCircuit.tsx).
+
+The worst metric is measured across a **geometric sweep of token counts over `[8, MAX_TOKENS]`**,
+not only at `MAX_TOKENS` — the longest metric *string* can occur at a mid token count (e.g.
+`KV 999.9 KiB` is wider than `KV 4.5 MiB`), so boxes fit at every slider position.
+
+**Containment hierarchy (outline ⊇ panels ⊇ text).** Layer-group outlines are derived from the
+real branch-panel extents (topmost header-pill top → bottommost tee dot, + `BRACKET_M`), and
+groups are placed along a running `cursor` so adjacent outlines/chips never overlap (`GROUP_GAP`).
+This makes the full hierarchy — group-outline contains block-panels contains box-text — enforced
+by construction, not by manual tuning.
 
 **Succinct block text.** Block labels must be terse (target ≤ ~22 chars; hard ceiling 24).
 Prefer the short symbol form — e.g. `Q down-proj (A)`, `MLA attention`, `QKV projection`.
@@ -160,32 +170,41 @@ Architecture conventions to preserve across all models:
 
 ---
 
-## 3. The `ExplorerMode` Contract
+## 3. The `ExplorerMode` Contract — **realized**
 
-**Target shape (describe; do not implement yet):**
+Implemented in [`src/explorer-kit/mode.ts`](src/explorer-kit/mode.ts) and consumed by
+[`src/App.tsx`](src/App.tsx) as a typed `MODES` registry:
 
 ```ts
-interface ExplorerMode<Index, Manifest> {
-  id:           string                          // 'data' | 'components' | 'architecture'
-  label:        string                          // displayed in family-switch nav
-  icon?:        React.ReactNode
-  loadIndex:    () => Promise<Index>            // fetches <mode>/index.json
-  loadManifest: (slug: string) => Promise<Manifest>  // fetches <mode>/<slug>.json
-  View:         React.ComponentType<{ index: Index; manifest: Manifest }>
+interface ExplorerModeProps { navigate: (id: string) => void }
+interface ExplorerMode {
+  id:       string            // 'data' | 'components' | 'architecture'
+  label:    string            // family-switch nav label
+  icon:     LucideIcon
+  subtitle: string            // header subtitle for the active mode
+  View:     ComponentType<ExplorerModeProps>
 }
 ```
 
-**Shared kit primitives to extract** (one-time refactor, later phase):
+**Design decision — loading stays in each View.** Rather than hoist `loadIndex` /
+`loadManifest` into a generic shell, each `View` remains its own index→manifest reader (it
+already follows that pattern). The contract captures the *shared shape* and gives every mode a
+`navigate(id)` prop — the general cross-link mechanism (R3) that replaced the bespoke
+`onOpenArchitecture` callback. Adding a mode is now one `MODES` entry; no new conditional.
 
-| Primitive | Current location | Responsibility |
-|---|---|---|
-| `AsyncBoundary` | inline in each explorer | `loading` / `error` states, retry button |
-| `DetailDrawer` | inline in Architecture | sticky drawer with `symbol`, `ref` link, `desc`, `note` |
-| `SubjectSwitcher` | inline pill nav in Architecture | `role="tablist"` pill row; fires `onSubject(slug)` |
-| `Toolbar` | inline in Architecture | lens selector + param slider; composable |
+**Shared kit primitives (extracted, in [`src/explorer-kit/`](src/explorer-kit)):**
 
-These primitives live in `src/components/` and are imported by each mode's `<Mode>Explorer.tsx`.
-No mode reimplements them.
+| Primitive | Responsibility |
+|---|---|
+| `AsyncBoundary` | `loading` / `error` / "run gen-data" empty states |
+| `DetailDrawer` | sticky drawer with `symbol`, `ref` link, `desc`, `note` |
+| `SubjectSwitcher` | `role="tablist"` pill row; fires `onChange(slug)` |
+| `ViewTabs` | canonical pill tablist for sub-view / lens selection |
+
+**Design decision — no `Toolbar` primitive.** A dedicated toolbar wrapper was evaluated and
+intentionally *not* extracted: the three modes have differently shaped control rows, so a
+one-size wrapper added coupling without payoff. Controls compose `SubjectSwitcher` / `ViewTabs`
+/ `Slider` inside plain Tailwind utility rows instead.
 
 ---
 

@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils'
 import { AsyncBoundary } from '@/explorer-kit/AsyncBoundary'
 import { ViewTabs } from '@/explorer-kit/ViewTabs'
 import { SubjectSwitcher } from '@/explorer-kit/SubjectSwitcher'
+import type { ExplorerModeProps } from '@/explorer-kit/mode'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import ArchitectureGraph from './ArchitectureGraph'
 import ComponentDrawer from './ComponentDrawer'
@@ -24,11 +25,8 @@ interface GraphEntry {
 
 type Page = 'flow' | 'subsystems'
 
-export default function ComponentExplorer({
-  onOpenArchitecture,
-}: {
-  onOpenArchitecture: () => void
-}) {
+export default function ComponentExplorer({ navigate }: ExplorerModeProps) {
+  const onOpenArchitecture = () => navigate('architecture')
   const [index, setIndex] = useState<GraphEntry[] | null>(null)
   const [indexError, setIndexError] = useState<string | null>(null)
   const [slug, setSlug] = useState<string | null>(null)

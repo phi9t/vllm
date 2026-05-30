@@ -1,36 +1,40 @@
 import { useState } from 'react'
 import { ArrowLeft, Database, Network, Boxes } from 'lucide-react'
 import { REPO_HOME, logoMarkUrl } from './lib/assets'
+import type { ExplorerMode } from './explorer-kit/mode'
 import DataExplorer from './data/DataExplorer'
 import ComponentExplorer from './components-deepdive/ComponentExplorer'
 import ArchitectureExplorer from './architecture/ArchitectureExplorer'
 
-export type ExplorerFamily = 'data' | 'components' | 'architecture'
-
-const FAMILIES: { id: ExplorerFamily; label: string; icon: typeof Database; subtitle: string }[] = [
+// Typed mode registry — adding a mode is one entry here, no new conditional.
+const MODES: ExplorerMode[] = [
   {
     id: 'data',
     label: 'Data Exploration',
     icon: Database,
     subtitle: 'fineweb-edu format & Qwen3 tokenization',
+    View: DataExplorer,
   },
   {
     id: 'components',
     label: 'Component Deep Dive',
     icon: Network,
     subtitle: 'V1 engine internals — a HACKERS_GUIDE + hacks companion',
+    View: ComponentExplorer,
   },
   {
     id: 'architecture',
     label: 'Model Architecture',
     icon: Boxes,
     subtitle: 'Inference forward pass — Qwen3 & DeepSeek (dense · MoE · MLA)',
+    View: ArchitectureExplorer,
   },
 ]
 
 export default function App() {
-  const [family, setFamily] = useState<ExplorerFamily>('data')
-  const active = FAMILIES.find((f) => f.id === family)!
+  const [activeId, setActiveId] = useState<string>(MODES[0].id)
+  const active = MODES.find((m) => m.id === activeId) ?? MODES[0]
+  const ActiveView = active.View
 
   return (
     <div className="relative min-h-screen">
@@ -54,13 +58,13 @@ export default function App() {
           </div>
 
           <nav className="family-switch" aria-label="Explorer section">
-            {FAMILIES.map(({ id, label, icon: Icon }) => (
+            {MODES.map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
                 type="button"
-                className={`family-switch-btn ${family === id ? 'active' : ''}`}
-                aria-pressed={family === id}
-                onClick={() => setFamily(id)}
+                className={`family-switch-btn ${activeId === id ? 'active' : ''}`}
+                aria-pressed={activeId === id}
+                onClick={() => setActiveId(id)}
               >
                 <Icon size={14} aria-hidden="true" />
                 {label}
@@ -70,11 +74,7 @@ export default function App() {
         </header>
 
         <main id="main-content">
-          {family === 'data' && <DataExplorer />}
-          {family === 'components' && (
-            <ComponentExplorer onOpenArchitecture={() => setFamily('architecture')} />
-          )}
-          {family === 'architecture' && <ArchitectureExplorer />}
+          <ActiveView navigate={setActiveId} />
         </main>
       </div>
     </div>
