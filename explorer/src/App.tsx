@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { ArrowLeft, Database, Network, Boxes } from 'lucide-react'
+import { ArrowLeft, Database, Network, Boxes, BookOpen } from 'lucide-react'
 import { REPO_HOME, logoMarkUrl } from './lib/assets'
 import type { ExplorerMode } from './explorer-kit/mode'
 import DataExplorer from './data/DataExplorer'
 import ComponentExplorer from './components-deepdive/ComponentExplorer'
 import ArchitectureExplorer from './architecture/ArchitectureExplorer'
+import GuideExplorer from './guide/GuideExplorer'
 
 // Typed mode registry — adding a mode is one entry here, no new conditional.
 const MODES: ExplorerMode[] = [
@@ -28,6 +29,13 @@ const MODES: ExplorerMode[] = [
     icon: Boxes,
     subtitle: 'Inference forward pass — Qwen3 & DeepSeek (dense · MoE · MLA)',
     View: ArchitectureExplorer,
+  },
+  {
+    id: 'guide',
+    label: "Hacker's Guide",
+    icon: BookOpen,
+    subtitle: 'The vLLM V1 engine, code-first — rendered from HACKERS_GUIDE.md (v0.22.0)',
+    View: GuideExplorer,
   },
 ]
 

@@ -232,9 +232,13 @@ def main() -> None:
         encoding="utf-8",
     )
 
+    # guide.md — the raw guide markdown, served verbatim so the SPA's
+    # "Hacker's Guide" page can render the prose (not just the graph).
+    (out.parent / "guide.md").write_text(md, encoding="utf-8")
+
     print(
         f"wrote {out} : {len(nodes)} core nodes, {len(edges)} edges, "
-        f"{len(sections)} sections, {len(hacks)} hacks; graphs/index.json"
+        f"{len(sections)} sections, {len(hacks)} hacks; graphs/index.json; guide.md"
     )
 
 

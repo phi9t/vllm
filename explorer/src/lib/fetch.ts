@@ -14,6 +14,16 @@ export async function fetchExplorerJson<T>(path: string): Promise<T> {
   return response.json() as Promise<T>
 }
 
+/** Fetch a text asset (e.g. markdown) from public/data/. */
+export async function fetchExplorerText(path: string): Promise<string> {
+  const url = dataUrl(path.startsWith('data/') ? path : `data/${path}`)
+  const response = await fetch(url)
+  if (!response.ok) {
+    throw new Error(`Failed to load ${path}: ${response.status} ${response.statusText}`)
+  }
+  return response.text()
+}
+
 /** Format a numeric metric with magnitude-aware precision. */
 export function formatMetric(value: number): string {
   if (!Number.isFinite(value)) return '—'
