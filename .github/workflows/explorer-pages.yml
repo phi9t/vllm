@@ -39,7 +39,11 @@ jobs:
           cache: npm
           cache-dependency-path: explorer/package-lock.json
 
-      - run: npm ci
+      # `npm install` (not `npm ci`): the lockfile is generated on macOS and a
+      # few transitive deps (e.g. @emnapi/*) have platform-conditional optional
+      # entries that npm omits cross-platform, which `npm ci` rejects on Linux.
+      # `npm install` reconciles the lockfile to the runner's platform.
+      - run: npm install --no-audit --no-fund
 
       # Project page lives under /vllm/ — vite.config.ts reads VITE_BASE_PATH,
       # and lib/assets.ts resolves data via import.meta.env.BASE_URL.
