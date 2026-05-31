@@ -18,5 +18,23 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // Honor the `_`-prefix convention for intentionally-unused bindings
+      // (e.g. dropping react-markdown's `node` prop, unused render args).
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
+      // shadcn-style ui files export a CVA `*Variants` const beside the
+      // component; allow it for Fast Refresh.
+      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+      // The mode views intentionally reset stale state when the selected
+      // subject changes, then fetch — a benign, idiomatic data-reset effect.
+      'react-hooks/set-state-in-effect': 'warn',
+    },
   },
 ])
