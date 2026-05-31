@@ -535,3 +535,24 @@ body {
 .guide tr:nth-child(even) td {
   background: rgba(255, 255, 255, 0.015);
 }
+/* Rendered mermaid diagrams (lazy-loaded in GuideExplorer) */
+.guide-mermaid {
+  display: flex;
+  justify-content: center;
+  margin: 20px 0;
+  padding: 12px;
+  background: rgba(11, 15, 25, 0.5);
+  border: 1px solid var(--color-panelborder);
+  border-radius: var(--radius-panel);
+  overflow-x: auto;
+}
+.guide-mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+/* Fallback when a diagram fails to render — show its source */
+.guide-mermaid-src {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre;
+}

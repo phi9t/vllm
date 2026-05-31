@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeSlug from 'rehype-slug'
@@ -33,6 +33,75 @@ function slugify(text: string): string {
     .replace(/ /g, '-')
 }
 
+// --- Mermaid: lazy-loaded, themed to Observatory --------------------------------
+let mermaidReady: Promise<typeof import('mermaid').default> | null = null
+function loadMermaid() {
+  if (!mermaidReady) {
+    mermaidReady = import('mermaid').then(({ default: mermaid }) => {
+      mermaid.initialize({
+        startOnLoad: false,
+        securityLevel: 'strict',
+        theme: 'base',
+        themeVariables: {
+          darkMode: true,
+          fontFamily: 'Fira Code Variable, ui-monospace, monospace',
+          fontSize: '13px',
+          background: '#0b0f19',
+          primaryColor: '#161d2e',
+          primaryBorderColor: '#6366f1',
+          primaryTextColor: '#f3f4f6',
+          secondaryColor: '#16233a',
+          tertiaryColor: '#1d1838',
+          lineColor: '#38bdf8',
+          textColor: '#cbd5e1',
+          titleColor: '#f3f4f6',
+          clusterBkg: 'rgba(99,102,241,0.06)',
+          clusterBorder: 'rgba(99,102,241,0.35)',
+          edgeLabelBackground: '#0b0f19',
+        },
+      })
+      return mermaid
+    })
+  }
+  return mermaidReady
+}
+
+/** Render one ```mermaid block to SVG; fall back to the source on error. */
+function Mermaid({ chart }: { chart: string }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [failed, setFailed] = useState(false)
+  const rawId = useId()
+  const id = 'mmd-' + rawId.replace(/[^a-zA-Z0-9]/g, '')
+
+  useEffect(() => {
+    let cancelled = false
+    loadMermaid()
+      .then((mermaid) => mermaid.render(id, chart))
+      .then(({ svg }) => {
+        if (!cancelled && ref.current) ref.current.innerHTML = svg
+      })
+      .catch(() => {
+        if (!cancelled) setFailed(true)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [chart, id])
+
+  if (failed) {
+    return <pre className="guide-mermaid-src">{chart}</pre>
+  }
+  return <div className="guide-mermaid" role="img" aria-label="diagram" ref={ref} />
+}
+
+function isMermaidNode(node: unknown): boolean {
+  // hast <pre> node whose first child is <code class="language-mermaid">
+  const child = (node as { children?: { properties?: { className?: unknown } }[] })
+    ?.children?.[0]
+  const cls = child?.properties?.className
+  return Array.isArray(cls) && cls.some((c) => String(c).includes('language-mermaid'))
+}
+
 const components: Components = {
   a({ href, children, node: _node, ...rest }) {
     const r = rewriteHref(href)
@@ -42,6 +111,21 @@ const components: Components = {
         {children}
       </a>
     )
+  },
+  code({ className, children, node: _node, ...rest }) {
+    if (/\blanguage-mermaid\b/.test(className || '')) {
+      return <Mermaid chart={String(children).trim()} />
+    }
+    return (
+      <code className={className} {...rest}>
+        {children}
+      </code>
+    )
+  },
+  pre({ node, children, ...rest }) {
+    // Mermaid blocks render their own <div>; don't wrap them in <pre>.
+    if (isMermaidNode(node)) return <>{children}</>
+    return <pre {...rest}>{children}</pre>
   },
 }
 

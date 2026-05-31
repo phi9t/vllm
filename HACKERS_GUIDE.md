@@ -198,55 +198,200 @@ the rest of the guide is detail.
 
 ### 4.1 Continuous batching & the unified token model
 
-The classic way to batch inference is *request-level*: gather N prompts, run
-them together, wait for all to finish. That wastes the GPU — a 5-token reply
-and a 500-token reply are stuck in the same batch, and new requests wait for
-the slowest one.
+**The problem.** The obvious way to batch inference is *request-level* (a.k.a.
+static batching): gather N prompts, run them as a fixed batch, return when all
+finish. Two things kill it. First, **head-of-line blocking** — a 5-token reply
+is held hostage by a 500-token reply in the same batch, and the GPU keeps
+re-running the finished sequence's padding. Second, **no mid-flight admission** —
+a request that arrives at step 2 waits for the whole batch to drain. On a chat
+workload (wildly varying output lengths) utilization craters.
 
-vLLM batches at the **token level** instead, and re-decides every step. The
-key simplification (read the NOTE at
-[`vllm/v1/core/sched/scheduler.py:329`](vllm/v1/core/sched/scheduler.py)):
-**there is no "prefill phase" and no "decode phase."** Each request only
-carries two numbers:
+**The fix: iteration-level scheduling.** vLLM (following Orca) re-decides the
+batch *every step* at **token** granularity. The move that makes this clean —
+read the NOTE at
+[`vllm/v1/core/sched/scheduler.py:329`](vllm/v1/core/sched/scheduler.py) — is
+that the scheduler has **no "prefill phase" and no "decode phase."** Each
+`Request` carries just two integers:
 
-- `num_computed_tokens` — how many of its tokens already have KV in the cache.
-- `num_tokens_with_spec` — how many it *wants* computed
-  (`len(prompt) + len(output_so_far) + len(speculative_draft)`).
+- `num_computed_tokens` — tokens that already have KV in the cache; starts at 0
+  ([`vllm/v1/request.py:145`](vllm/v1/request.py)).
+- `num_tokens_with_spec` — tokens it *wants* computed:
+  `len(prompt + output_so_far) + len(spec_draft)`
+  ([`vllm/v1/request.py:243`](vllm/v1/request.py)).
 
-Every step the scheduler hands each request some tokens so `num_computed_tokens`
-**catches up** to `num_tokens_with_spec`. A brand-new request is "behind" by
-its whole prompt (a big catch-up = prefill); a mid-generation request is behind
-by one token (a tiny catch-up = decode). **Chunked prefill, prefix caching, and
-speculative decoding are not special cases — they're just different values of
-these two counters.** That one abstraction is the spine of the whole engine.
+**The invariant.** Every step, give each request enough tokens to make
+`num_computed_tokens` **catch up** toward `num_tokens_with_spec`, bounded by a
+single per-step **token budget** (the flat batch width, §8). The *size* of the
+catch-up is the only difference between what we'd call prefill and decode:
+
+| step | event | computed → wants | assigned | reads as |
+|---|---|---|---|---|
+| 1 | prompt of 20 admitted, budget 16 | 0 → 20 | 16 | prefill (chunked by budget) |
+| 2 | finish prompt; model emits tok 21 | 16 → 20, then → 21 | 4 | prefill tail |
+| 3 | generate | 20 → 21 | 1 | decode |
+| 4 | generate | 21 → 22 | 1 | decode |
+
+A fresh request is "behind" by its whole prompt (big catch-up = prefill); a
+generating request is behind by one (catch-up of 1 = decode). One request's
+whole life is just this loop:
+
+```mermaid
+flowchart LR
+  A["admit (computed = 0)"] --> B{"more to compute?"}
+  B -- "behind by many (prefill / chunk)" --> C["assign min(behind, budget); computed += assigned"]
+  B -- "behind by 1 (decode)" --> D["assign 1, sample, wants += 1"]
+  C --> B
+  D --> B
+  B -- "no: EOS / max_tokens" --> E["finish, free KV"]
+```
+
+**Why it matters (the payoff).** Three "features" are not features at all —
+they're different counter values in the *same* loop:
+
+- **Chunked prefill** = the budget caps step 1's catch-up, spreading a long
+  prompt over several steps so it can't monopolize the batch.
+- **Prefix caching** = `num_computed_tokens` jumps forward for free when a
+  prefix's blocks are already resident (§9).
+- **Speculative decoding** = `spec_token_ids` makes `num_tokens_with_spec` jump
+  by *k*, so the target model verifies k+1 tokens in one step.
+
+Because the scheduler never branches on "prefill vs decode," one flat batch
+freely mixes a request finishing its prompt, another decoding its 200th token,
+and a third just admitted — which is exactly what §12 packs into one tensor.
 
 ### 4.2 Paged memory (the KV cache is virtual memory)
 
-A transformer must remember the keys/values of every past token (the **KV
-cache**) to generate the next one. A naive cache reserves one big contiguous
-buffer per request, sized to the *max* length — so a request that stops early
-wastes the rest, and you can't admit a new request unless a full max-length
-slab is free. That's internal fragmentation, and it murders throughput.
+**The problem, quantified.** A transformer must keep the keys/values of every
+past token (the **KV cache**) to attend over them when generating the next.
+The naive layout gives each request one *contiguous* buffer sized to
+`max_model_len`. Two failure modes:
 
-Paged attention applies the **OS virtual-memory trick**: chop the cache into
-fixed-size **blocks** (default 16 tokens), keep a shared **pool** of physical
-blocks, and give each request a **block table** mapping its logical blocks →
-physical blocks. A request grows one block at a time; identical prefixes can
-**share** the same physical block. §9 is the mechanism.
+- **Internal fragmentation** — a 40-token chat in a 4096-token slab uses
+  `40/4096 ≈ 1%`; the other **99% is reserved but idle**. You can't reclaim it
+  because the request might still grow.
+- **External fragmentation** — even with free memory, you can't admit a request
+  unless a *single contiguous* max-length slab is free. Free space scattered in
+  small holes is unusable.
+
+The result: you fit a handful of concurrent sequences and the GPU starves.
+
+**The fix is the OS virtual-memory trick.** Chop the cache into fixed-size
+**blocks** (default `block_size = 16` tokens,
+[`vllm/config/cache.py:47`](vllm/config/cache.py)), keep a shared **pool** of
+physical blocks, and give each request a **block table** mapping its *logical*
+blocks → *physical* blocks. The correspondence is exact:
+
+| OS virtual memory | vLLM paged KV cache |
+|---|---|
+| page | block (16 tokens of K/V) |
+| page table | block table (per request) |
+| physical RAM | the shared `BlockPool` ([`block_pool.py:130`](vllm/v1/core/block_pool.py)) |
+| free-frame list | doubly-linked `KVCacheBlock` queue ([`kv_cache_utils.py:116`](vllm/v1/core/kv_cache_utils.py)) |
+| shared read-only page | shared prefix block (`ref_cnt > 1`) |
+| page fault from disk | fault-back from an offload tier (§11) |
+
+A request grows **one block at a time, on demand**, so a 40-token chat costs
+`⌈40/16⌉ = 3` blocks — not 256. Physical order is irrelevant because attention
+follows the block table. And because the table is just pointers, two requests
+with the same prefix can point at the **same physical blocks** (bumping
+`ref_cnt`); a block is evictable only when `ref_cnt == 0`:
+
+```mermaid
+flowchart LR
+  subgraph A["Request A — block table"]
+    a0["logical 0"] --> a1["logical 1"] --> a2["logical 2"]
+  end
+  subgraph B["Request B — block table"]
+    b0["logical 0"] --> b1["logical 1"] --> b2["logical 2"]
+  end
+  subgraph P["Shared BlockPool (physical)"]
+    p0["phys 7  'The capital'  ref=2"]
+    p1["phys 3  ' of France'   ref=2"]
+    p2["phys 9  ' is Paris'    ref=1"]
+    p5["phys 5  ' is in Asia'  ref=1"]
+  end
+  a0 --> p0
+  b0 --> p0
+  a1 --> p1
+  b1 --> p1
+  a2 --> p2
+  b2 --> p5
+```
+
+**Consequences.** Near-zero internal waste, prefix sharing for free, and
+graceful pressure handling (evict the coldest unreferenced block, not a whole
+request). The same blocks-by-hash machinery powers prefix caching (§9) and
+offloading (§11). §9 is the concrete mechanism — `allocate_slots`, the LRU, and
+the hash chain that makes sharing safe.
 
 ### 4.3 Prefill vs decode are different *compute profiles*
 
-Even though the scheduler doesn't distinguish them, the hardware does:
+The scheduler doesn't distinguish prefill and decode (§4.1), but the **hardware
+does** — and which one you're doing decides whether you're limited by FLOPs or
+by memory bandwidth.
 
-- **Prefill** processes many prompt tokens at once → big matmuls →
-  **compute-bound** (you're limited by FLOPs/s).
-- **Decode** processes one token per request → tiny matmuls, but must stream
-  the *entire model's weights* (and KV) through the ALUs for that one token →
-  **memory-bandwidth-bound**.
+**Arithmetic intensity & the roofline.** A kernel's *arithmetic intensity* is
+FLOPs performed per byte moved from HBM. A GPU has a fixed compute:bandwidth
+ratio; plot achievable throughput against intensity and you get a **roofline**:
+below the "ridge" intensity you're **memory-bound** (bandwidth caps you), above
+it you're **compute-bound** (FLOPs cap you).
 
-This is why batching helps decode the most (amortize the weight read over many
-requests' tokens) and why a long prompt's prefill can starve everyone's decode
-(→ chunked prefill, §8/§21).
+```
+ throughput
+   (FLOP/s)
+   peak ┤             ________________  ← compute-bound roof (peak FLOP/s)
+        │            /
+        │           /  ridge point
+        │          /
+        │        / ← memory-bound roof (slope = HBM bandwidth)
+        │      /
+        │    /  ● decode (low intensity: ~2 FLOP/byte, reuses each weight once)
+        │  /
+        │/_____________________●__________  prefill (high intensity: big GEMMs)
+        └──────────────────────────────────  arithmetic intensity (FLOP/byte)
+```
+
+- **Prefill** multiplies *n* prompt tokens through every weight matrix at once →
+  large GEMMs (plus O(n²) attention) → each weight byte is reused across many
+  tokens → high intensity → **compute-bound**.
+- **Decode** produces *one* token per request, so each weight is used for a
+  single multiply before the next weight is needed → intensity ≈ 2 FLOP/byte →
+  you spend the step **streaming the whole model (weights + KV) through the
+  ALUs** → **memory-bandwidth-bound**.
+
+**The decode latency floor (batch 1).** Because decode must read essentially all
+weights to emit one token, its per-token time can't beat
+`weights_bytes / HBM_bandwidth`. For a **7 B** model in bf16 (≈ 14 GB):
+
+| GPU | HBM bandwidth | floor = 14 GB ÷ BW |
+|---|---|---|
+| A100-80GB | ~2.0 TB/s | **~7.0 ms/token** |
+| H100-SXM | ~3.35 TB/s | **~4.2 ms/token** |
+| B200 | ~8 TB/s | **~1.75 ms/token** |
+
+(KV reads add to this and grow with context; weights dominate at short context.)
+The formula is hardware-agnostic: faster HBM → proportionally faster decode.
+
+**Why batching is the decode lever.** Read the weights **once**, reuse them for
+N requests' tokens in the same step → ~N× throughput for nearly the same
+latency, until you saturate compute or KV bandwidth. That's the whole reason
+continuous batching (§4.1) exists; prefill, already compute-bound, gains far
+less from batching.
+
+| | prefill | decode |
+|---|---|---|
+| tokens/step (per req) | many (the prompt) | 1 |
+| bound by | FLOPs (compute) | HBM bandwidth (weights + KV) |
+| batching helps? | little (already saturated) | **enormously** (amortize weight read) |
+| CUDA-graphable? | piecewise (variable shape) | full graph (fixed shape) |
+
+**The bridge to code.** Even though the scheduler is unified, the runner and
+attention kernel still recognize the decode shape: a uniform decode batch is
+`max_query_len == 1` with `cu_query_lens`, which gets a captured CUDA-graph fast
+path ([`vllm/v1/attention/backends/flash_attn.py:281`](vllm/v1/attention/backends/flash_attn.py),
+§19), while prefill runs eager/piecewise. **Consequences:** long prompts starve
+decode → chunked prefill (§8); shrinking the bytes decode must read —
+quantization, GQA, MLA — directly cuts latency (§10, §22).
 
 ### 4.4 The memory hierarchy & the roofline
 
@@ -513,18 +658,18 @@ per-cache-group id (`BlockHashWithGroupId`) keep different content from collidin
 ```mermaid
 flowchart LR
   subgraph LogicalA["Request A logical blocks"]
-    A0[Block 0\n'The capital'] --> A1[Block 1\n' of France']
-    A1 --> A2[Block 2\n' is Paris']
+    A0["Block 0: 'The capital'"] --> A1["Block 1: ' of France'"]
+    A1 --> A2["Block 2: ' is Paris'"]
   end
   subgraph LogicalB["Request B logical blocks"]
-    B0[Block 0\n'The capital'] --> B1[Block 1\n' of France']
-    B1 --> B2[Block 2\n' is in Europe']
+    B0["Block 0: 'The capital'"] --> B1["Block 1: ' of France'"]
+    B1 --> B2["Block 2: ' is in Europe'"]
   end
   subgraph Physical["Physical KV pool"]
-    P0[P0\n'The capital']
-    P1[P1\n' of France']
-    P2[P2\n' is Paris']
-    P3[P3\n' is in Europe']
+    P0["P0: 'The capital'"]
+    P1["P1: ' of France'"]
+    P2["P2: ' is Paris'"]
+    P3["P3: ' is in Europe'"]
   end
   A0 -. h0 hit .-> P0
   B0 -. h0 hit .-> P0
